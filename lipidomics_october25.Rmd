@@ -1,0 +1,608 @@
+---
+title: "Lipidomics analysis - data from October 2025"
+author: "Ana Galhoz"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    keep_md: yes
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 5
+    theme: lumen
+---
+
+## Run Libraries
+
+```{r run-libraries,message=FALSE,warning = FALSE}
+rm(list=ls())
+
+library(pheatmap)
+library(ggplot2)
+library(dichromat)
+library(dplyr)
+library(ggrepel)
+library(reshape2)
+library(umap)
+library(ggthemes)
+library(cowplot)
+library(DEP)
+library(readr)
+library(naniar)
+library(SummarizedExperiment)
+library(data.table)
+library(readxl)
+library(writexl)
+library(stringr)
+library(vsn)
+library(rmarkdown)
+# library(stringr)
+# library(MetaboAnalystR)
+# library(matrixStats)
+# library(wesanderson)
+# library(clusterProfiler)
+# library(enrichplot)
+# library(msigdbr)
+```
+
+## Set working directories
+
+```{r set-working-directories, message=FALSE, class.source = 'fold-hide'}
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+
+# create directory for results
+dir.create(file.path(getwd(),'results'), showWarnings = FALSE)
+# create directory for plots
+dir.create(file.path(getwd(),'plots'), showWarnings = FALSE)
+```
+
+## Load data
+
+Loading data including:
+
+- All templates: information on the tube ID, rack, visit, country, type of fluid, position
+- Shipment of all boxes file: information on the patient ID, visit, position
+- Raw data: lipidomics expression with info on the tube ID for CSF and Plasma
+
+### Step 1: merge info of all patients
+
+The **first step** is to *merge* the information of the *"All templates"* and *"Shipment of all boxes"* files, and *create 3 datasets* (one for *plasma*, one for *CSF*, one for *urine*) with the information of *Patient ID, Position, Biofluid, Visit, Tube number, Country, Rack and Box*.
+
+```{r load-data-and-wrangling-patient-info, message=F,echo = FALSE}
+# -> urine
+lipidomics_urine_1 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275399_Urine 1") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack)
+lipidomics_urine_2 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275429_Urine 2") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack)
+lipidomics_urine_3 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275447_Urine 3") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack)
+lipidomics_urine_4 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275464_Urine 4") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Tube_number = if_else(str_length(Tube_number) < 4,
+                       str_pad(Tube_number, width = 4, side = "left", pad = "0"),
+                       Tube_number))
+# -> plasma
+lipidomics_plasma_1 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275402_Plasma 1") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Tube_number = if_else(str_length(Tube_number) < 4,
+                       str_pad(Tube_number, width = 4, side = "left", pad = "0"),
+                       Tube_number))
+lipidomics_plasma_2 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275433_Plasma 2") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack) 
+lipidomics_plasma_3 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275446_Plasma 3") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack)
+lipidomics_plasma_4 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275463_Plasma 4") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Tube_number = if_else(str_length(Tube_number) < 4,
+                       str_pad(Tube_number, width = 4, side = "left", pad = "0"),
+                       Tube_number))
+# -> CSF
+lipidomics_CSF_1 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275415_CSF 1") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack)
+lipidomics_CSF_2 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275414_CSF 2") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack)
+lipidomics_CSF_3 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275444_CSF 3") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack)
+lipidomics_CSF_4 = read_excel("data input/all_templates_Slovakia.xlsx", 
+    sheet = "Rack_5500275459_CSF 4") %>%
+  mutate(Position = paste0(`Tube Row`,`Tube Column`)) %>%
+  dplyr::rename(Rack = `CRYOBOX Barcode`,
+         Tube_number = `Tube Barcode`,
+         Visit = VISIT,
+         Country = SITE,
+         Biofluid = MATERIAL) %>%
+  select(Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Tube_number = if_else(str_length(Tube_number) < 4,
+                       str_pad(Tube_number, width = 4, side = "left", pad = "0"),
+                       Tube_number))
+
+# get patient ID per box, position and visit
+info_patientID_1 =  read_excel("data input/premodiALS shipment all boxes list for omics analyses-2.xlsx", 
+    sheet = "Box1") %>%
+  dplyr::rename(Comment = `...13`,
+         Patient = `Patient ID`) %>%
+  select(Patient,Position,Visit,Comment)
+info_patientID_2 =  read_excel("data input/premodiALS shipment all boxes list for omics analyses-2.xlsx", 
+    sheet = "Box2") %>%
+  dplyr::rename(Comment = `...13`,
+         Patient = `Patient ID`) %>%
+  select(Patient,Position,Visit,Comment)
+info_patientID_3 =  read_excel("data input/premodiALS shipment all boxes list for omics analyses-2.xlsx", 
+    sheet = "Box3") %>%
+  dplyr::rename(Comment = `...13`,
+         Patient = `Patient ID`) %>%
+  select(Patient,Position,Visit,Comment)
+info_patientID_4 =  read_excel("data input/premodiALS shipment all boxes list for omics analyses-2.xlsx", 
+    sheet = "Box4") %>%
+  dplyr::rename(Comment = `...13`,
+         Patient = `Patient ID`) %>%
+  select(Patient,Position,Visit,Comment)
+info_patientID_4_aux =  read_excel("data input/premodiALS shipment all boxes list for omics analyses-2.xlsx", 
+    sheet = "unscanned") 
+colnames(info_patientID_4_aux) = c("Patient","Position","Biofluid","Visit",
+                                   "Tube_nr","Country","Rack")
+info_patientID_4_aux <- info_patientID_4_aux %>%
+  mutate(Tube_nr = if_else(str_length(Tube_nr) < 4,
+                       str_pad(Tube_nr, width = 4, side = "left", pad = "0"),
+                       Tube_nr))
+
+# make sumarised data of  patient IDs, biofluid type,  tube IDs, visit, rack and box number
+# CSF
+lipidomics_CSF_1 <- lipidomics_CSF_1 %>% left_join(info_patientID_1) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 1")
+lipidomics_CSF_2 <- lipidomics_CSF_2 %>% left_join(info_patientID_2) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 2")
+lipidomics_CSF_3 <- lipidomics_CSF_3 %>% left_join(info_patientID_3) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 3")
+lipidomics_CSF_4_aux1 <- lipidomics_CSF_4 %>% left_join(info_patientID_4) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 4")
+lipidomics_CSF_4_aux2 <- lipidomics_CSF_4 %>% 
+  left_join(info_patientID_4_aux %>% select(Tube_nr,Position,Patient,Biofluid,Visit) %>%
+              mutate(Tube_nr = ifelse(Tube_nr == "nothing",NA,Tube_nr))) %>%
+  mutate(Tube_number = ifelse(!is.na(Tube_nr),Tube_nr,Tube_number)) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 4") %>%
+  distinct()
+lipidomics_CSF_4 = rbind(lipidomics_CSF_4_aux1,
+                         lipidomics_CSF_4_aux2) %>%
+  arrange(str_extract(Position, "[A-Z]"), as.numeric(str_extract(Position, "\\d+"))) %>%
+  distinct() %>%
+  group_by(Position,Visit) %>%
+  filter(!(any(!is.na(Patient)) & is.na(Patient))) %>%
+  ungroup()
+lipidomics_CSF_all = do.call("rbind",list(lipidomics_CSF_1,
+                                          lipidomics_CSF_2,
+                                          lipidomics_CSF_3,
+                                          lipidomics_CSF_4))
+# Plasma
+lipidomics_plasma_1 <- lipidomics_plasma_1 %>% left_join(info_patientID_1) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 1")
+lipidomics_plasma_2 <- lipidomics_plasma_2 %>% left_join(info_patientID_2) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 2")
+lipidomics_plasma_3 <- lipidomics_plasma_3 %>% left_join(info_patientID_3) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 3")
+lipidomics_plasma_4_aux1 <- lipidomics_plasma_4 %>% left_join(info_patientID_4) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 4")
+lipidomics_plasma_4_aux2 <- lipidomics_plasma_4 %>% 
+  left_join(info_patientID_4_aux %>% dplyr::select(Tube_nr,Position,Patient,Biofluid,Visit) %>%
+              mutate(Tube_nr = ifelse(Tube_nr == "nothing",NA,Tube_nr),
+                     Biofluid = ifelse(Biofluid == "Plasma","plasma",Biofluid))) %>%
+  mutate(Tube_number = ifelse(!is.na(Tube_nr),Tube_nr,Tube_number)) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 4") %>%
+  distinct()
+lipidomics_plasma_4 = rbind(lipidomics_plasma_4_aux1,
+                         lipidomics_plasma_4_aux2) %>%
+  arrange(str_extract(Position, "[A-Z]"), as.numeric(str_extract(Position, "\\d+"))) %>%
+  distinct() %>%
+  group_by(Position,Visit) %>%
+  filter(!(any(!is.na(Patient)) & is.na(Patient))) %>%
+  ungroup()
+lipidomics_plasma_all = do.call("rbind",list(lipidomics_plasma_1,
+                                          lipidomics_plasma_2,
+                                          lipidomics_plasma_3,
+                                          lipidomics_plasma_4))
+# Urine
+lipidomics_urine_1 <- lipidomics_urine_1 %>% left_join(info_patientID_1) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 1")
+lipidomics_urine_2 <- lipidomics_urine_2 %>% left_join(info_patientID_2) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 2")
+lipidomics_urine_3 <- lipidomics_urine_3 %>% left_join(info_patientID_3) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 3")
+lipidomics_urine_4_aux1 <- lipidomics_urine_4 %>% left_join(info_patientID_4) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 4")
+lipidomics_urine_4_aux2 <- lipidomics_urine_4 %>% 
+  left_join(info_patientID_4_aux %>% dplyr::select(Tube_nr,Position,Patient,Biofluid,Visit) %>%
+              mutate(Tube_nr = ifelse(Tube_nr == "nothing",NA,Tube_nr),
+                     Biofluid = ifelse(Biofluid == "Urine","urine",Biofluid))) %>%
+  mutate(Tube_number = ifelse(!is.na(Tube_nr),Tube_nr,Tube_number)) %>%
+  select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
+  mutate(Box = "Box 4") %>%
+  distinct()
+lipidomics_urine_4 = rbind(lipidomics_urine_4_aux1,
+                         lipidomics_urine_4_aux2) %>%
+  arrange(str_extract(Position, "[A-Z]"), as.numeric(str_extract(Position, "\\d+"))) %>%
+  distinct() %>%
+  group_by(Position,Visit) %>%
+  filter(!(any(!is.na(Patient)) & is.na(Patient))) %>%
+  ungroup()
+lipidomics_urine_all = do.call("rbind",list(lipidomics_urine_1,
+                                          lipidomics_urine_2,
+                                          lipidomics_urine_3,
+                                          lipidomics_urine_4))
+
+# get raw data
+# -> CSF
+raw_data_CSF_1 =  read_excel("data input/Premodials_CSF_Areas.xlsx", 
+    sheet = "2025-08-05 Premodials_Batch1") 
+raw_data_CSF_2 = read_excel("data input/Premodials_CSF_Areas.xlsx", 
+    sheet = "2025-08-06 Predmodials_Batch2")
+raw_data_CSF_3 = read_excel("data input/Premodials_CSF_Areas.xlsx", 
+    sheet = "2025-08-07 Predmodials_Batch3")
+raw_data_CSF <- do.call("rbind",list(raw_data_CSF_1,
+                                     raw_data_CSF_2,
+                                     raw_data_CSF_3)) %>%
+  mutate(Tube_number = str_extract(`Sample Name`, "(?<=_)\\d+(?=_)"),
+         Batch = paste0("Batch ",str_extract(`Sample Name`,"(?<=_)(\\d+)$")),
+         Tube_number = if_else(str_starts(`Sample Name`,"QC_"),
+                               paste0("QC_",Tube_number),Tube_number)) 
+raw_data_CSF_final = raw_data_CSF[,c(896,897,4:895)]
+
+# -> plasma
+raw_data_plasma_1 = read_excel("data input/Premodials_Plasma_Areas.xlsx", 
+    sheet = "2025-07-09 Predmodials_Batch1")
+raw_data_plasma_2 = read_excel("data input/Premodials_Plasma_Areas.xlsx", 
+    sheet = "2025-07-10 Predmodials_Batch2")
+raw_data_plasma_3 = read_excel("data input/Premodials_Plasma_Areas.xlsx", 
+    sheet = "2025-07-11 Predmodials_Batch3")
+raw_data_plasma_4 = read_excel("data input/Premodials_Plasma_Areas.xlsx", 
+    sheet = "2025-07-29 Predmodials_Batch4")
+raw_data_plasma_5 = read_excel("data input/Premodials_Plasma_Areas.xlsx", 
+    sheet = "2025-07-30 Predmodials_Batch5")
+raw_data_plasma_6 = read_excel("data input/Premodials_Plasma_Areas.xlsx", 
+    sheet = "2025-07-31 Predmodials_Batch6")
+raw_data_plasma_7 = read_excel("data input/Premodials_Plasma_Areas.xlsx", 
+    sheet = "2025-08-01 Predmodials_Batch7")
+raw_data_plasma <- do.call("rbind",list(raw_data_plasma_1,
+                                     raw_data_plasma_2,
+                                     raw_data_plasma_3,
+                                     raw_data_plasma_4,
+                                     raw_data_plasma_5,
+                                     raw_data_plasma_6,
+                                     raw_data_plasma_7)) %>%
+  mutate(Tube_number = str_extract(`Sample Name`, "(?<=_)\\d+(?=_)"),
+         Batch = paste0("Batch ",str_extract(`Sample Name`,"(?<=_)(\\d+)$")),
+         Tube_number = if_else(str_starts(`Sample Name`,"QC_"),
+                               paste0("QC_",Tube_number),Tube_number)) 
+raw_data_plasma_final = raw_data_plasma[,c(896,897,4:895)]
+```
+
+#### - CSF
+```{r data-structure-patient-info-CSF, message=F,warning=FALSE}
+## sample info - CSF
+paged_table(lipidomics_CSF_all)
+dim(lipidomics_CSF_all)
+lipidomics_CSF_all_summary <- lipidomics_CSF_all %>%
+  group_by(Visit) %>%
+  summarise(
+    total_patients = n_distinct(Patient, na.rm = TRUE),
+    total_tubes = n_distinct(Tube_number, na.rm = TRUE),
+    total_patients_tubes_pairs = n_distinct(
+      paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)]))
+lipidomics_CSF_all_summary
+```
+
+#### - Plasma
+```{r data-structure-patient-info-plasma, message=F,warning=FALSE}
+## sample info - plasma
+paged_table(lipidomics_plasma_all)
+dim(lipidomics_plasma_all)
+lipidomics_plasma_all_summary <- lipidomics_plasma_all %>%
+  group_by(Visit) %>%
+   summarise(
+    total_patients = n_distinct(Patient, na.rm = TRUE),
+    total_tubes = n_distinct(Tube_number, na.rm = TRUE),
+    total_patients_tubes_pairs = n_distinct(
+      paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)]))
+lipidomics_plasma_all_summary
+```
+
+#### - Urine
+```{r data-structure-patient-info-urine, message=F}
+## sample info - urine
+paged_table(lipidomics_urine_all)
+dim(lipidomics_urine_all)
+lipidomics_urine_all_summary <- lipidomics_urine_all %>%
+  group_by(Visit) %>%
+  summarise(
+    total_patients = n_distinct(Patient, na.rm = TRUE),
+    total_tubes = n_distinct(Tube_number, na.rm = TRUE),
+    total_patients_tubes_pairs = n_distinct(
+      paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)]))
+lipidomics_urine_all_summary
+```
+
+### Step 2: aggregate all raw files 
+
+The **second step** is to *aggregate* all the raw data files together and save the batch information, in order to check later if there are any batch effects in the data. 
+
+#### - CSF
+```{r load-raw-data-and-wrangling-CSF, message=F}
+paged_table(raw_data_CSF_final)
+dim(raw_data_CSF_final)
+# how many rows of QC
+length(grep("QC",raw_data_CSF_final$Tube_number))
+```
+
+#### - Plasma
+```{r load-raw-data-and-wrangling-Plasma, message=F}
+paged_table(raw_data_plasma_final)
+dim(raw_data_plasma_final)
+# how many rows of QC
+length(grep("QC",raw_data_plasma_final$Tube_number))
+```
+
+### Step 3: Combine raw data files with patient info
+
+The **third step** is to *combine* the raw data files with the patient information, and check the amount of samples per visit for each fluid.
+
+#### - CSF
+```{r raw-data-patient-CSF, message=F,warning=FALSE}
+raw_data_CSF_IDs = raw_data_CSF_final %>%
+  select(Tube_number,Batch)
+raw_data_CSF_IDs <- raw_data_CSF_IDs %>%
+  mutate(Tube_number4 = str_sub(Tube_number,-4)) %>% # last 4 digits
+  filter(!str_detect(Tube_number, "QC")) # remove 30 QC IDs
+
+# how many IDs in the raw data CSF
+length(raw_data_CSF_IDs$Tube_number)
+# how many unique IDs in the raw data CSF
+length(unique(raw_data_CSF_IDs$Tube_number))
+
+lipidomics_CSF_all <- lipidomics_CSF_all %>%
+  mutate(Tube_number4 = str_sub(Tube_number,-4)) # last 4 digits
+full_match_CSF = raw_data_CSF_IDs %>%
+  left_join(lipidomics_CSF_all,by = "Tube_number") %>%
+  mutate(match_type = ifelse(!is.na(Tube_number4.y),"Full",NA))
+no_match_CSF = full_match_CSF %>%
+  filter(is.na(match_type)) %>%
+  dplyr::rename(Tube_number4 = Tube_number4.y) %>%
+  select(-names(lipidomics_CSF_all)) %>%
+  dplyr::rename(Tube_number4 = Tube_number4.x)
+last4_match_CSF = no_match_CSF %>%
+  left_join(lipidomics_CSF_all,by = "Tube_number4") %>%
+  mutate(match_type = ifelse(!is.na(Tube_number),"Last4","No match"))
+
+# final description of the samples available in the raw data without QC samples
+combined_data_CSF = full_match_CSF %>%
+  filter(!is.na(match_type)) %>%
+  select(-c(Tube_number4.x,Tube_number4.y,match_type)) %>%
+  bind_rows(last4_match_CSF %>% 
+              select(-Tube_number) %>% 
+              left_join(raw_data_CSF_IDs %>% select(Tube_number,Tube_number4)) %>%
+              select(Tube_number,Patient,Position,Biofluid,Visit,Country,Rack,Box,Batch)) %>%
+  distinct()
+
+paged_table(combined_data_CSF)
+# how many IDs in the raw data CSF now 
+length(combined_data_CSF$Tube_number)
+# how many unique IDs in the raw data CSF now
+length(unique(combined_data_CSF$Tube_number))
+# how many unique Patient IDs
+length(unique(combined_data_CSF$Patient))
+
+# what is duplicated
+combined_data_CSF[duplicated(combined_data_CSF$Tube_number),]
+
+# how many tube numbers and patient IDs per V0 and V1
+combined_data_CSF %>%
+  group_by(Visit) %>%
+  summarise(
+    total_patients = n_distinct(Patient, na.rm = TRUE), # amount of patient IDs
+    total_tubes = n_distinct(Tube_number, na.rm = TRUE), # amount of tube numbers
+    total_patients_tubes_pairs = n_distinct(
+      paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)])) # amount of pairs
+
+# patients at V0 and V1
+patients_CSF_V0 <- combined_data_CSF %>%
+  filter(Visit == "V0") %>%
+  pull(Patient) %>%
+  unique()
+patients_CSF_V1 <- combined_data_CSF %>%
+  filter(Visit == "V1") %>%
+  pull(Patient) %>%
+  unique() %>% 
+  na.omit()
+
+# check if all patients at V1 are at V0
+all(patients_CSF_V1 %in% patients_CSF_V0)
+
+patients_CSF_V1[!patients_CSF_V1 %in% patients_CSF_V0] # patient TR319
+
+# check patient in the info_patient dataset
+lipidomics_CSF_all[lipidomics_CSF_all$Patient %in% patients_CSF_V1[!patients_CSF_V1 %in% patients_CSF_V0],]
+```
+
+
+#### - Plasma
+```{r raw-data-patient-Plasma, message=F,warning=FALSE}
+raw_data_plasma_IDs = raw_data_plasma_final %>%
+  select(Tube_number,Batch)
+raw_data_plasma_IDs <- raw_data_plasma_IDs %>%
+  mutate(Tube_number4 = str_sub(Tube_number,-4)) %>% # last 4 digits
+  filter(!str_detect(Tube_number, "QC")) # remove 66 QC IDs
+
+# how many IDs in the raw data plasma
+length(raw_data_plasma_IDs$Tube_number)
+# how many unique IDs in the raw data plasma
+length(unique(raw_data_plasma_IDs$Tube_number))
+
+lipidomics_plasma_all <- lipidomics_plasma_all %>%
+  mutate(Tube_number4 = str_sub(Tube_number,-4)) # last 4 digits
+full_match_plasma = raw_data_plasma_IDs %>%
+  left_join(lipidomics_plasma_all,by = "Tube_number") %>%
+  mutate(match_type = ifelse(!is.na(Tube_number4.y),"Full",NA))
+no_match_plasma = full_match_plasma %>%
+  filter(is.na(match_type)) %>%
+  dplyr::rename(Tube_number4 = Tube_number4.y) %>%
+  select(-names(lipidomics_plasma_all)) %>%
+  dplyr::rename(Tube_number4 = Tube_number4.x)
+last4_match_plasma = no_match_plasma %>%
+  left_join(lipidomics_plasma_all,by = "Tube_number4") %>%
+  mutate(match_type = ifelse(!is.na(Tube_number),"Last4","No match"))
+
+# final description of the samples available in the raw data without QC samples
+combined_data_plasma = full_match_plasma %>%
+  filter(!is.na(match_type)) %>%
+  select(-c(Tube_number4.x,Tube_number4.y,match_type)) %>%
+  bind_rows(last4_match_plasma %>% 
+              select(-Tube_number) %>% 
+              left_join(raw_data_plasma_IDs %>% select(Tube_number,Tube_number4)) %>%
+              select(Tube_number,Patient,Position,Biofluid,Visit,Country,Rack,Box,Batch)) %>%
+  distinct()
+
+paged_table(combined_data_plasma)
+# how many IDs in the raw data plasma now 
+length(combined_data_plasma$Tube_number)
+# how many unique IDs in the raw data plasma now
+length(unique(combined_data_plasma$Tube_number))
+# how many unique Patient IDs
+length(unique(combined_data_plasma$Patient))
+
+# how many tube numbers and patient IDs per V0 and V1
+combined_data_plasma %>%
+  group_by(Visit) %>%
+  summarise(
+    total_patients = n_distinct(Patient, na.rm = TRUE), # amount of patient IDs
+    total_tubes = n_distinct(Tube_number, na.rm = TRUE), # amount of tube numbers
+    total_patients_tubes_pairs = n_distinct(
+      paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)])) # amount of pairs
+
+# patients at V0 and V1
+patients_plasma_V0 <- combined_data_plasma %>%
+  filter(Visit == "V0") %>%
+  pull(Patient) %>%
+  unique()
+patients_plasma_V1 <- combined_data_plasma %>%
+  filter(Visit == "V1") %>%
+  pull(Patient) %>%
+  unique() %>% 
+  na.omit()
+
+# check if all patients at V1 are at V0
+all(patients_plasma_V1 %in% patients_plasma_V0)
+
+patients_plasma_V1[!patients_plasma_V1 %in% patients_plasma_V0] # patients TR207, TR116 and TR123
+
+# check patient in the info_patient dataset
+lipidomics_plasma_all[lipidomics_plasma_all$Patient %in% patients_plasma_V1[!patients_plasma_V1 %in% patients_plasma_V0],]
+```
+
+#### Overview of the samples based on status 
+
+#### Step 4: creation of summarised experiment datasets
+
+The **fourth step** is to *remove* the QC rows, *save* the experimental setup (info of patient ID, batch, sample ID, visit, etc.), *structure* the lipidomics dataset to numeric and *create* summarised experiments datasets.
+
+#### Step 5
+
+The **fifth step** is to *check* for missing omics per patient and overall, *filter* lipids that are not quantified in less than 1/3 of the samples and *normalise* the data (using vsn).
+
+#### Step 6
+
+The **sixth step** is to *create visualizations*, such as heatmaps and PCAs (for each fluid with ID/batch info, and with both fluids together)
+
+#### Step 7
+
+The **seventh step** is to *perform differential expression analyses*, with particular interest of eALS vs CTR, PGMC vs CTR. For this, the information between IDs and the status (eALS, CTR, PGMC, mimic) have to be collected from other datasets 
+
