@@ -37,6 +37,9 @@ library(writexl)
 library(stringr)
 library(vsn)
 library(rmarkdown)
+library(tidyr)
+library(Polychrome)
+library(RColorBrewer)
 # library(stringr)
 # library(MetaboAnalystR)
 # library(matrixStats)
@@ -380,6 +383,27 @@ lipidomics_CSF_all_summary <- lipidomics_CSF_all %>%
     total_patients_tubes_pairs = n_distinct(
       paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)]))
 lipidomics_CSF_all_summary
+
+# which tube IDs are missing for Patient IDs at V0
+lipidomics_CSF_all_V0 = lipidomics_CSF_all %>%
+  filter(Visit == "V0")
+paged_table(lipidomics_CSF_all_V0 %>%
+  filter(is.na(Tube_number) & !is.na(Patient)))
+
+# check which Patient IDs are duplicated at V0
+paged_table(lipidomics_CSF_all_V0 %>%
+  filter(Patient %in% lipidomics_CSF_all_V0[duplicated(lipidomics_CSF_all_V0$Patient),]$Patient))
+
+# which tube IDs are missing for Patient IDs at V1
+lipidomics_CSF_all_V1 = lipidomics_CSF_all %>%
+  filter(Visit == "V1")
+paged_table(lipidomics_CSF_all_V1 %>%
+  filter(is.na(Tube_number) & !is.na(Patient)))
+
+# check which Patient IDs are duplicated at V1
+paged_table(lipidomics_CSF_all_V1 %>%
+  filter(Patient %in% lipidomics_CSF_all_V1[duplicated(lipidomics_CSF_all_V1$Patient),]$Patient))
+
 ```
 
 #### - Plasma
@@ -395,6 +419,26 @@ lipidomics_plasma_all_summary <- lipidomics_plasma_all %>%
     total_patients_tubes_pairs = n_distinct(
       paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)]))
 lipidomics_plasma_all_summary
+
+# which tube IDs are missing for Patient IDs at V0
+lipidomics_plasma_all_V0 = lipidomics_plasma_all %>%
+  filter(Visit == "V0")
+paged_table(lipidomics_plasma_all_V0 %>%
+  filter(is.na(Tube_number) & !is.na(Patient)))
+
+# check which Patient IDs are duplicated at V0
+paged_table(lipidomics_plasma_all_V0 %>%
+  filter(Patient %in% lipidomics_plasma_all_V0[duplicated(lipidomics_plasma_all_V0$Patient),]$Patient))
+
+# which tube IDs are missing for Patient IDs at V1
+lipidomics_plasma_all_V1 = lipidomics_plasma_all %>%
+  filter(Visit == "V1")
+paged_table(lipidomics_plasma_all_V1 %>%
+  filter(is.na(Tube_number) & !is.na(Patient)))
+
+# check which Patient IDs are duplicated at V1
+paged_table(lipidomics_plasma_all_V1 %>%
+  filter(Patient %in% lipidomics_plasma_all_V1[duplicated(lipidomics_plasma_all_V1$Patient),]$Patient))
 ```
 
 #### - Urine
@@ -410,6 +454,26 @@ lipidomics_urine_all_summary <- lipidomics_urine_all %>%
     total_patients_tubes_pairs = n_distinct(
       paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)]))
 lipidomics_urine_all_summary
+
+# which tube IDs are missing for Patient IDs at V0
+lipidomics_urine_all_V0 = lipidomics_urine_all %>%
+  filter(Visit == "V0")
+paged_table(lipidomics_urine_all_V0 %>%
+  filter(is.na(Tube_number) & !is.na(Patient)))
+
+# check which Patient IDs are duplicated at V0
+paged_table(lipidomics_urine_all_V0 %>%
+  filter(Patient %in% lipidomics_urine_all_V0[duplicated(lipidomics_urine_all_V0$Patient),]$Patient))
+
+# which tube IDs are missing for Patient IDs at V1
+lipidomics_urine_all_V1 = lipidomics_urine_all %>%
+  filter(Visit == "V1")
+paged_table(lipidomics_urine_all_V1 %>%
+  filter(is.na(Tube_number) & !is.na(Patient)))
+
+# check which Patient IDs are duplicated at V1
+paged_table(lipidomics_urine_all_V1 %>%
+  filter(Patient %in% lipidomics_urine_all_V1[duplicated(lipidomics_urine_all_V1$Patient),]$Patient))
 ```
 
 ### Step 2: aggregate all raw files 
@@ -431,6 +495,8 @@ dim(raw_data_plasma_final)
 # how many rows of QC
 length(grep("QC",raw_data_plasma_final$Tube_number))
 ```
+
+## Overview of data
 
 ### Step 3: Combine raw data files with patient info
 
@@ -460,7 +526,10 @@ no_match_CSF = full_match_CSF %>%
   select(-names(lipidomics_CSF_all)) %>%
   dplyr::rename(Tube_number4 = Tube_number4.x)
 last4_match_CSF = no_match_CSF %>%
-  left_join(lipidomics_CSF_all,by = "Tube_number4") %>%
+  left_join(lipidomics_CSF_all %>% 
+              filter(!Tube_number %in% (full_match_CSF %>% filter(!is.na(match_type)) %>%
+                                          pull(Tube_number))),
+            by = "Tube_number4") %>%
   mutate(match_type = ifelse(!is.na(Tube_number),"Last4","No match"))
 
 # final description of the samples available in the raw data without QC samples
@@ -469,7 +538,9 @@ combined_data_CSF = full_match_CSF %>%
   select(-c(Tube_number4.x,Tube_number4.y,match_type)) %>%
   bind_rows(last4_match_CSF %>% 
               select(-Tube_number) %>% 
-              left_join(raw_data_CSF_IDs %>% select(Tube_number,Tube_number4)) %>%
+              left_join(raw_data_CSF_IDs %>% select(Tube_number,Tube_number4) %>%
+                          filter(!Tube_number %in% (full_match_CSF %>% filter(!is.na(match_type)) %>%
+                                          pull(Tube_number)))) %>%
               select(Tube_number,Patient,Position,Biofluid,Visit,Country,Rack,Box,Batch)) %>%
   distinct()
 
@@ -479,10 +550,7 @@ length(combined_data_CSF$Tube_number)
 # how many unique IDs in the raw data CSF now
 length(unique(combined_data_CSF$Tube_number))
 # how many unique Patient IDs
-length(unique(combined_data_CSF$Patient))
-
-# what is duplicated
-combined_data_CSF[duplicated(combined_data_CSF$Tube_number),]
+length(unique(na.omit(combined_data_CSF$Patient)))
 
 # how many tube numbers and patient IDs per V0 and V1
 combined_data_CSF %>%
@@ -492,6 +560,11 @@ combined_data_CSF %>%
     total_tubes = n_distinct(Tube_number, na.rm = TRUE), # amount of tube numbers
     total_patients_tubes_pairs = n_distinct(
       paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)])) # amount of pairs
+
+# which Tube numbers at V1 do not have a patient ID
+combined_data_CSF %>%
+  filter(Visit == "V1") %>%
+  filter(is.na(Patient))
 
 # patients at V0 and V1
 patients_CSF_V0 <- combined_data_CSF %>%
@@ -557,7 +630,7 @@ length(combined_data_plasma$Tube_number)
 # how many unique IDs in the raw data plasma now
 length(unique(combined_data_plasma$Tube_number))
 # how many unique Patient IDs
-length(unique(combined_data_plasma$Patient))
+length(unique(na.omit(combined_data_plasma$Patient)))
 
 # how many tube numbers and patient IDs per V0 and V1
 combined_data_plasma %>%
@@ -567,6 +640,16 @@ combined_data_plasma %>%
     total_tubes = n_distinct(Tube_number, na.rm = TRUE), # amount of tube numbers
     total_patients_tubes_pairs = n_distinct(
       paste(Patient, Tube_number)[!is.na(Patient) & !is.na(Tube_number)])) # amount of pairs
+
+# which Tube numbers at V0 do not have a patient ID
+combined_data_plasma %>%
+  filter(Visit == "V0") %>%
+  filter(is.na(Patient))
+
+# which Tube numbers at V1 do not have a patient ID
+combined_data_plasma %>%
+  filter(Visit == "V1") %>%
+  filter(is.na(Patient))
 
 # patients at V0 and V1
 patients_plasma_V0 <- combined_data_plasma %>%
@@ -588,21 +671,862 @@ patients_plasma_V1[!patients_plasma_V1 %in% patients_plasma_V0] # patients TR207
 lipidomics_plasma_all[lipidomics_plasma_all$Patient %in% patients_plasma_V1[!patients_plasma_V1 %in% patients_plasma_V0],]
 ```
 
-#### Overview of the samples based on status 
+#### Step 4: Overview of the samples based on status 
 
-#### Step 4: creation of summarised experiment datasets
+The **fourth step** is to *give an overview* of how many samples of *eALS*, *PGMC*, *CTR* and *mimic* we have *per fluid*, *visit* and *country*.
 
-The **fourth step** is to *remove* the QC rows, *save* the experimental setup (info of patient ID, batch, sample ID, visit, etc.), *structure* the lipidomics dataset to numeric and *create* summarised experiments datasets.
+```{r overview-IDs, message=F,warning=FALSE,echo=FALSE}
+# General documentation info
+GeneralDocumentation <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/GeneralDocumentation.csv", 
+           delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
-#### Step 5
+# IDS of patients
+# -> ALS patients
+ALS_ID <- GeneralDocumentation %>%
+  filter((ALSuncertainty == 1 | ALSFUdiagnosis == 1) & ALSFUdiagnosis %in% c(1,3,NA)) %>%
+  select(PatientID,ParticipantCode) %>% 
+  mutate(type = "ALS")
 
-The **fifth step** is to *check* for missing omics per patient and overall, *filter* lipids that are not quantified in less than 1/3 of the samples and *normalise* the data (using vsn).
+# -> CTR 
+CTR_ID <- GeneralDocumentation %>%
+  filter(PGMC == 2) %>%
+  select(PatientID,ParticipantCode) %>% 
+  mutate(type = "CTR")
 
-#### Step 6
+# -> PGMC
+PGMC_ID <- GeneralDocumentation %>%
+  filter(PGMC == 1) %>%
+  select(PatientID,ParticipantCode) %>% 
+  mutate(type = "PGMC")
 
-The **sixth step** is to *create visualizations*, such as heatmaps and PCAs (for each fluid with ID/batch info, and with both fluids together)
+# -> Mimic
+mimic_ID <- GeneralDocumentation %>%
+  filter((ALSuncertainty == 2 | ALSFUdiagnosis == 2) & ALSFUdiagnosis %in% c(2,NA)) %>%
+  select(PatientID,ParticipantCode) %>% 
+  mutate(type = "mimic")
 
-#### Step 7
+# PGMC IDs with mutations
+PGMC_mutations_ID <- GeneralDocumentation %>%
+  select(PatientID, ParticipantCode,PGMC,contains("MutationType")) %>%
+  filter(PGMC==1)
+PGMC_mutations_ID_tmp <- sapply(apply(PGMC_mutations_ID[,4:17],1,
+                                  function(x){which(x == 1)}) %>% unique(), function(x) x + 3)
+PGMC_mutations_ID <- PGMC_mutations_ID[,c(1,2,unlist(PGMC_mutations_ID_tmp))]
+PGMC_mutations_ID <- PGMC_mutations_ID %>%
+  mutate(type = ifelse(MutationTypeC9orf72 == 1,"C9orf72",
+                       ifelse(MutationTypeSOD1 == 1,"SOD1",
+                              ifelse(MutationTypeTARDBP == 1,"TARDBP",
+                                     ifelse(MutationTypeFUS==1,"FUS",
+                                            ifelse(MutationTypeOther==1 | MutationTypeFIG4==1 | MutationTypeUBQLN2==1,"other",NA)))))) %>%
+  select(PatientID,ParticipantCode,type) %>%
+  filter(!is.na(type))
 
-The **seventh step** is to *perform differential expression analyses*, with particular interest of eALS vs CTR, PGMC vs CTR. For this, the information between IDs and the status (eALS, CTR, PGMC, mimic) have to be collected from other datasets 
+all_participants_IDs = do.call("rbind",
+                               list(CTR_ID,
+                                    ALS_ID,
+                                    PGMC_ID,
+                                    mimic_ID,
+                                    PGMC_mutations_ID))
+writexl::write_xlsx(all_participants_IDs,"results/all_participants_IDs.xlsx")
+
+```
+
+#### - CSF (the patient IDs given by Laura)
+```{r overview-IDs-CSF-Laura, message=F,warning=FALSE}
+# IDs in CSF (131)
+IDs_CSF <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/CSFAcquisition.csv",
+                          delim = ";", escape_double = FALSE, trim_ws = TRUE) %>%
+  filter(CsfSexists == 1) %>% pull(PatientID) %>% unique()
+IDs_CSF_data_1 = GeneralDocumentation %>%
+  select(PatientID,ParticipantCode) %>%
+  filter(PatientID %in% IDs_CSF) %>%
+  dplyr::rename(Patient = ParticipantCode) %>%
+  left_join(lipidomics_CSF_all) %>%
+  select(Patient,Visit,Position) %>%
+  distinct() %>%
+  left_join(all_participants_IDs %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  mutate(
+    Country = dplyr::case_when(
+      grepl("TR", Patient) ~ "Turkey",
+      grepl("CH", Patient) ~ "Switzerland",
+      grepl("DE", Patient) ~ "Germany",
+      grepl("SK", Patient) ~ "Slovakia",
+      grepl("FR", Patient) ~ "France",
+      TRUE                 ~ NA_character_
+    )) %>%
+  arrange(Patient)
+
+paged_table(IDs_CSF_data_1)
+
+overview_country_CSF_1 = IDs_CSF_data_1 %>%
+  group_by(Visit,Country) %>%
+  summarise(n_unique_patients = n_distinct(Patient),.groups = "drop") %>%
+  arrange(Visit,desc(n_unique_patients))
+overview_country_CSF_1
+
+overview_status_CSF_1 = IDs_CSF_data_1 %>%
+  group_by(type,Visit,Country) %>% 
+  distinct() %>%
+  summarise(nr_samples = n_distinct(Patient)) %>%
+  select(type, Visit,Country,nr_samples) %>%
+  pivot_wider(
+    names_from  = type,        
+    values_from = nr_samples,  
+    values_fill = 0) %>%
+  select(Visit,Country,PGMC,CTR,ALS,mimic,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
+overview_status_CSF_1
+
+```
+
+#### - CSF (the patient IDs existing in the raw data)
+```{r overview-IDs-CSF-raw-data, message=F,warning=FALSE}
+IDs_CSF_data = combined_data_CSF %>%
+  select(Patient,Visit,Tube_number) %>%
+  distinct() %>%
+  left_join(all_participants_IDs %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  mutate(
+    Country = dplyr::case_when(
+      grepl("TR", Patient) ~ "Turkey",
+      grepl("CH", Patient) ~ "Switzerland",
+      grepl("DE", Patient) ~ "Germany",
+      grepl("SK", Patient) ~ "Slovakia",
+      grepl("FR", Patient) ~ "France",
+      TRUE                 ~ NA_character_
+    )) %>%
+  arrange(Patient)
+
+paged_table(IDs_CSF_data)
+
+overview_country_CSF = IDs_CSF_data %>%
+  group_by(Visit,Country) %>%
+  summarise(n_unique_patients = n_distinct(Patient),.groups = "drop") %>%
+  arrange(Visit,desc(n_unique_patients))
+overview_country_CSF
+
+overview_status_CSF = IDs_CSF_data %>%
+  group_by(type,Visit,Country) %>% 
+  distinct() %>%
+  summarise(nr_samples = n_distinct(Patient)) %>%
+  select(type, Visit,Country,nr_samples) %>%
+  pivot_wider(
+    names_from  = type,        
+    values_from = nr_samples,  
+    values_fill = 0) %>%
+  select(Visit,Country,PGMC,CTR,ALS,mimic,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
+overview_status_CSF
+
+```
+
+#### - Plasma (the patient IDs given by Laura)
+```{r overview-IDs-Plasma-Laura, message=F,warning=FALSE}
+# IDs in plasma (235)
+IDs_plasma <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/BloodAcquisition.csv",
+                          delim = ";", escape_double = FALSE, trim_ws = TRUE) %>%
+  filter(BAexists == 1) %>% pull(PatientID) %>% unique()
+
+IDs_plasma_data_1 = GeneralDocumentation %>%
+  select(PatientID,ParticipantCode) %>%
+  filter(PatientID %in% IDs_plasma) %>%
+  dplyr::rename(Patient = ParticipantCode) %>%
+  left_join(lipidomics_plasma_all) %>%
+  select(Patient,Visit,Position) %>%
+  distinct() %>%
+  left_join(all_participants_IDs %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  mutate(
+    Country = dplyr::case_when(
+      grepl("TR", Patient) ~ "Turkey",
+      grepl("CH", Patient) ~ "Switzerland",
+      grepl("DE", Patient) ~ "Germany",
+      grepl("SK", Patient) ~ "Slovakia",
+      grepl("FR", Patient) ~ "France",
+      TRUE                 ~ NA_character_
+    )) %>%
+  arrange(Patient)
+
+paged_table(IDs_plasma_data_1)
+
+overview_country_plasma_1 = IDs_plasma_data_1 %>%
+  group_by(Visit,Country) %>%
+  summarise(n_unique_patients = n_distinct(Patient),.groups = "drop") %>%
+  arrange(Visit,desc(n_unique_patients))
+overview_country_plasma_1
+
+overview_status_plasma_1 = IDs_plasma_data_1 %>%
+  group_by(type,Visit,Country) %>% 
+  distinct() %>%
+  summarise(nr_samples = n_distinct(Patient)) %>%
+  select(type, Visit,Country,nr_samples) %>%
+  pivot_wider(
+    names_from  = type,        
+    values_from = nr_samples,  
+    values_fill = 0) %>%
+  select(Visit,Country,PGMC,CTR,ALS,mimic,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
+overview_status_plasma_1
+
+```
+
+#### - Plasma (the patient IDs existing in the raw data)
+```{r overview-IDs-Plasma-raw-data, message=F,warning=FALSE}
+IDs_plasma_data = combined_data_plasma %>%
+  select(Patient,Visit,Tube_number) %>%
+  distinct() %>%
+  left_join(all_participants_IDs %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  mutate(
+    Country = dplyr::case_when(
+      grepl("TR", Patient) ~ "Turkey",
+      grepl("CH", Patient) ~ "Switzerland",
+      grepl("DE", Patient) ~ "Germany",
+      grepl("SK", Patient) ~ "Slovakia",
+      grepl("FR", Patient) ~ "France",
+      TRUE                 ~ NA_character_
+    )) %>%
+  arrange(Patient)
+
+paged_table(IDs_plasma_data)
+
+overview_country_plasma = IDs_plasma_data %>%
+  group_by(Visit,Country) %>%
+  summarise(n_unique_patients = n_distinct(Patient),.groups = "drop") %>%
+  arrange(Visit,desc(n_unique_patients))
+overview_country_plasma
+
+overview_status_plasma = IDs_plasma_data %>%
+  group_by(type,Visit,Country) %>% 
+  distinct() %>%
+  summarise(nr_samples = n_distinct(Patient)) %>%
+  select(type, Visit,Country,nr_samples) %>%
+  pivot_wider(
+    names_from  = type,        
+    values_from = nr_samples,  
+    values_fill = 0) %>%
+  select(Visit,Country,PGMC,CTR,ALS,mimic,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
+overview_status_plasma
+
+```
+
+## Bioinformatic analyses
+
+#### Step 5: creation of summarised experiment datasets
+
+The **fifth step** is to *remove* the QC rows, *save* the experimental setup (info of patient ID, batch, sample ID, visit, etc.), *structure* the lipidomics dataset to numeric and *create* summarised experiments datasets.
+
+#### - CSF
+```{r summarised-experiments-CSF, message=F,warning=FALSE}
+# removal of QC rows
+raw_data_CSF_use = raw_data_CSF_final %>%
+  filter(!str_detect(Tube_number, "QC"))
+
+tube_batch_CSF = raw_data_CSF_use[,1:2] %>%
+  left_join(combined_data_CSF %>% select(Tube_number,Batch,Patient,Visit))
+raw_data_CSF_use_mat = as.matrix(raw_data_CSF_use[,3:ncol(raw_data_CSF_use)])
+rownames(raw_data_CSF_use_mat) = tube_batch_CSF %>% pull(Tube_number)
+
+# matrix with raw lipidomics data (rows - lipids and column - tube ID)
+lipidomics_CSF = as.data.frame(t(raw_data_CSF_use_mat))
+dim(lipidomics_CSF)
+
+# make columns numeric
+for(i in 1:ncol(lipidomics_CSF)){lipidomics_CSF[,i] = as.numeric(lipidomics_CSF[,i])}
+
+#make a list for all dataframes
+lipidomics_data_CSF = list(raw_data = lipidomics_CSF)
+
+## summarized objects 
+tube_batch_CSF = tube_batch_CSF %>% 
+  left_join(IDs_CSF_data) %>%
+  mutate(subtype = ifelse(type == "C9orf72","C9orf72",
+                          ifelse(type == "SOD1","SOD1",
+                                 ifelse(type == "FUS","FUS",
+                                        ifelse(type == "other","other",
+                                               ifelse(type == "TARDBP","TARDBP",NA)))))) %>%
+  mutate(type = ifelse(type %in% c("C9orf72","SOD1","FUS","TARDBP","other"),
+                       "PGMC",type)) %>%
+  arrange(subtype) %>%
+  distinct(Tube_number, Batch,Patient,PatientID,type, .keep_all = TRUE)
+
+# Check which tube numbers do not have a patient ID or type assigned (majority uncertain PURE MOTOR SYMPTOM (PMS) / MND MIMIC / EARLY ALS (EALS))
+tube_number_CSF_missing = tube_batch_CSF %>%
+  filter(is.na(Patient) | is.na(type)) %>%
+  arrange(Patient)
+tube_number_CSF_missing
+
+GeneralDocumentation %>%
+  select(ParticipantCode,PatientID,PGMC,ALSuncertainty,ALSFUdiagnosis) %>%
+  filter(ParticipantCode %in% tube_number_CSF_missing$Patient) %>%
+  filter(!is.na(ParticipantCode))
+
+abundance.columns <- 1:ncol(lipidomics_data_CSF$raw_data) # get abundance column numbers
+      clin = data.frame(label = tube_batch_CSF$Tube_number, 
+                        condition = tube_batch_CSF$type,
+                        sub_condition = tube_batch_CSF$subtype,
+                        batch = tube_batch_CSF$Batch)
+      
+      lipidomics_data_CSF$raw_data$name = lipidomics_data_CSF$raw_data$ID = rownames(lipidomics_data_CSF$raw_data)
+      experimental.design = clin
+      experimental.design <- experimental.design %>%
+        group_by(condition) %>%            
+        mutate(replicate = row_number()) %>%
+        ungroup()
+      
+      lipidomics_data_CSF$se <- make_se(lipidomics_data_CSF$raw_data, abundance.columns, experimental.design)
+lipidomics_data_CSF$se
+
+ writexl::write_xlsx(lipidomics_data_CSF$raw_data,"results/lipidomics_CSF_raw_data.xlsx")
+```
+
+#### - Plasma 
+```{r summarised-experiments-Plasma, message=F,warning=FALSE}
+# removal of QC rows
+raw_data_plasma_use = raw_data_plasma_final %>%
+  filter(!str_detect(Tube_number, "QC"))
+
+tube_batch_plasma = raw_data_plasma_use[,1:2] %>%
+  left_join(combined_data_plasma %>% select(Tube_number,Batch,Patient,Visit))
+raw_data_plasma_use_mat = as.matrix(raw_data_plasma_use[,3:ncol(raw_data_plasma_use)])
+rownames(raw_data_plasma_use_mat) = tube_batch_plasma %>% pull(Tube_number)
+
+# matrix with raw lipidomics data (rows - lipids and column - tube ID)
+lipidomics_plasma = as.data.frame(t(raw_data_plasma_use_mat))
+dim(lipidomics_plasma)
+
+# make columns numeric
+for(i in 1:ncol(lipidomics_plasma)){lipidomics_plasma[,i] = as.numeric(lipidomics_plasma[,i])}
+
+#make a list for all dataframes
+lipidomics_data_plasma = list(raw_data = lipidomics_plasma)
+
+## summarized objects 
+tube_batch_plasma = tube_batch_plasma %>% 
+  left_join(IDs_plasma_data) %>%
+  mutate(subtype = ifelse(type == "C9orf72","C9orf72",
+                          ifelse(type == "SOD1","SOD1",
+                                 ifelse(type == "FUS","FUS",
+                                        ifelse(type == "other","other",
+                                               ifelse(type == "TARDBP","TARDBP",NA)))))) %>%
+  mutate(type = ifelse(type %in% c("C9orf72","SOD1","FUS","TARDBP","other"),
+                       "PGMC",type)) %>%
+  arrange(subtype) %>%
+  distinct(Tube_number, Batch,Patient,PatientID,type, .keep_all = TRUE)
+
+# Check which tube numbers do not have a patient ID or type assigned (majority uncertain PURE MOTOR SYMPTOM (PMS) / MND MIMIC / EARLY ALS (EALS))
+tube_number_plasma_missing = tube_batch_plasma %>%
+  filter(is.na(Patient) | is.na(type)) %>%
+  arrange(Patient)
+tube_number_plasma_missing
+
+GeneralDocumentation %>%
+  select(ParticipantCode,PatientID,PGMC,ALSuncertainty,ALSFUdiagnosis) %>%
+  filter(ParticipantCode %in% tube_number_plasma_missing$Patient) %>%
+  filter(!is.na(ParticipantCode))
+
+abundance.columns <- 1:ncol(lipidomics_data_plasma$raw_data) # get abundance column numbers
+      clin = data.frame(label = tube_batch_plasma$Tube_number, 
+                        condition = tube_batch_plasma$type,
+                        sub_condition = tube_batch_plasma$subtype,
+                        batch = tube_batch_plasma$Batch)
+      
+      lipidomics_data_plasma$raw_data$name = lipidomics_data_plasma$raw_data$ID = rownames(lipidomics_data_plasma$raw_data)
+      experimental.design = clin
+      experimental.design <- experimental.design %>%
+        group_by(condition) %>%            
+        mutate(replicate = row_number()) %>%
+        ungroup()
+      
+      lipidomics_data_plasma$se <- make_se(lipidomics_data_plasma$raw_data, abundance.columns, experimental.design)
+ lipidomics_data_plasma$se
+ 
+ writexl::write_xlsx(lipidomics_data_plasma$raw_data,"results/lipidomics_plasma_raw_data.xlsx")
+```
+
+#### Step 6: missing analyses
+
+The **sixth step** is to *check* for missing omics per patient and overall, *filter* lipids that are not quantified in less than 1/3 of the samples and *normalise* the data (using vsn).
+
+#### - CSF 
+```{r missing inspection-CSF}
+# heatmap missing 
+vis_miss(lipidomics_data_CSF$raw_data,show_perc = TRUE,show_perc_col = TRUE,cluster = F)
+ggsave("plots/missing_vis_miss_heatmap_CSF.png", width = 15, height = 10, units = "in")
+
+# filter for lipids that are quantified in at least 2/3 of the samples
+lipidomics_data_CSF$se_filtered = filter_proteins(lipidomics_data_CSF$se,"fraction",min = 0.66)
+
+#dimensions of the data
+dim(lipidomics_data_CSF$se)
+dim(lipidomics_data_CSF$se_filtered)
+
+# heatmap missing for filtered data
+vis_miss(as.data.frame(assay(lipidomics_data_CSF$se_filtered)),show_perc = TRUE,show_perc_col = TRUE,cluster = F)
+ggsave("plots/missing_vis_miss_heatmap_filtered_CSF.png", width = 12, height = 8, units = "in")
+
+plot_frequency(lipidomics_data_CSF$se)
+ggsave("plots/frequency_met_identification_raw_CSF.pdf", width = 11, height = 8, units = "in")
+plot_frequency(lipidomics_data_CSF$se_filtered)
+ggsave("plots/frequency_met_identification_filtered_CSF.pdf", width = 11, height = 8, units = "in")
+
+# % missing per patient: 
+round(apply(X = as.data.frame(assay(lipidomics_data_CSF$se)), function(x) sum(is.na(x)), MARGIN = 2) / nrow(as.data.frame(assay(lipidomics_data_CSF$se))) * 100 , 1)
+round(apply(X = as.data.frame(assay(lipidomics_data_CSF$se_filtered)), function(x) sum(is.na(x)), MARGIN = 2) / nrow(as.data.frame(assay(lipidomics_data_CSF$se_filtered))) * 100 , 1)
+
+#normalization
+lipidomics_data_CSF$se_filt_norm <- normalize_vsn(lipidomics_data_CSF$se_filtered)
+DEP::meanSdPlot(lipidomics_data_CSF$se_filt_norm)
+
+writexl::write_xlsx(as.data.frame(assay(lipidomics_data_CSF$se_filtered)),"results/data_filtered_CSF.xlsx")
+writexl::write_xlsx(as.data.frame(assay(lipidomics_data_CSF$se_filt_norm)),"results/data_filtered_normalized_CSF.xlsx")
+
+# imputation
+lipidomics_data_CSF$se_filt_impute <- impute(
+  lipidomics_data_CSF$se_filt_norm,fun = "MinProb",q = 0.01)
+
+writexl::write_xlsx(as.data.frame(assay(lipidomics_data_CSF$se_filt_impute)),"results/data_filtered_normalized_imputed_CSF.xlsx")
+```
+
+#### - Plasma 
+
+```{r missing inspection-plasma}
+# heatmap missing 
+vis_miss(lipidomics_data_plasma$raw_data,show_perc = TRUE,show_perc_col = TRUE,cluster = F)
+ggsave("plots/missing_vis_miss_heatmap_plasma.png", width = 15, height = 10, units = "in")
+
+# filter for lipids that are quantified in at least 2/3 of the samples
+lipidomics_data_plasma$se_filtered = filter_proteins(lipidomics_data_plasma$se,"fraction",min = 0.66)
+
+#dimensions of the data
+dim(lipidomics_data_plasma$se)
+dim(lipidomics_data_plasma$se_filtered)
+
+# heatmap missing for filtered data
+vis_miss(as.data.frame(assay(lipidomics_data_plasma$se_filtered)),show_perc = TRUE,show_perc_col = TRUE,cluster = F)
+ggsave("plots/missing_vis_miss_heatmap_filtered_plasma.png", width = 12, height = 8, units = "in")
+
+plot_frequency(lipidomics_data_plasma$se)
+ggsave("plots/frequency_met_identification_raw_plasma.pdf", width = 11, height = 8, units = "in")
+plot_frequency(lipidomics_data_plasma$se_filtered)
+ggsave("plots/frequency_met_identification_filtered_plasma.pdf", width = 11, height = 8, units = "in")
+
+# % missing per patient: 
+round(apply(X = as.data.frame(assay(lipidomics_data_plasma$se)), function(x) sum(is.na(x)), MARGIN = 2) / nrow(as.data.frame(assay(lipidomics_data_plasma$se))) * 100 , 1)
+round(apply(X = as.data.frame(assay(lipidomics_data_plasma$se_filtered)), function(x) sum(is.na(x)), MARGIN = 2) / nrow(as.data.frame(assay(lipidomics_data_plasma$se_filtered))) * 100 , 1)
+
+#normalization
+lipidomics_data_plasma$se_filt_norm <- normalize_vsn(lipidomics_data_plasma$se_filtered)
+DEP::meanSdPlot(lipidomics_data_plasma$se_filt_norm)
+
+writexl::write_xlsx(as.data.frame(assay(lipidomics_data_plasma$se_filtered)),"results/data_filtered_plasma.xlsx")
+writexl::write_xlsx(as.data.frame(assay(lipidomics_data_plasma$se_filt_norm)),"results/data_filtered_normalized_plasma.xlsx")
+
+# imputation
+lipidomics_data_plasma$se_filt_impute <- impute(
+  lipidomics_data_plasma$se_filt_norm,fun = "MinProb",q = 0.01)
+
+writexl::write_xlsx(as.data.frame(assay(lipidomics_data_plasma$se_filt_impute)),"results/data_filtered_normalized_imputed_plasma.xlsx")
+
+```
+
+#### Step 7: Visualizations
+
+The **seventh step** is to *create visualizations*, such as heatmaps and PCAs (for each fluid with ID/batch info, and for both fluids together)
+
+```{r visualizations-functions,echo=FALSE}
+mean_expression_plot = function(data, file_sample, file_mass, title){
+  ggplot(data = reshape2::melt(data), aes(x=Var1, y=value)) +
+  geom_boxplot(color="darkseagreen4", fill="darkseagreen3") +
+  theme_set(theme_minimal()) +
+  theme_few() +
+  scale_colour_few() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(axis.text=element_text(size=6)) +
+  ggtitle(title)
+
+ggsave(file_sample, width = 11, height = 8, units = "in")
+
+ggplot(data = reshape2::melt(data), aes(x=reorder(as.factor(Var2),value), y=value)) +
+  geom_boxplot(color="darkseagreen4", fill="darkseagreen3") +
+  theme_set(theme_minimal()) +
+  theme_few() +
+  scale_colour_few() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme(axis.text=element_text(size=6))+
+  ggtitle(title)
+
+ggsave(file_mass, width = 11*2, height = 8, units = "in")
+}
+
+set.seed(9)
+
+#functions for saving the heatmaps as figures
+        
+save_pheatmap_pdf <- function(x, filename, width=11, height=8) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
+        
+make_pheatmap <- function(data, cluster_cols = T, main = "Heatmap", clustering_method = "ward.D", show_rownames = T,labels_col = clin$label){
+  p = pheatmap::pheatmap(data, name = "expression", cutree_cols = 1,
+          show_colnames = T,
+          show_rownames = show_rownames,
+          fontsize = 4,
+          fontsize_col = 4,
+          fontsize_row = 2, 
+          #annotation_col = annotation,
+          annotation_colors = annotation_colours,
+          annotation_row = annotation_row,
+          color = viridis::viridis(100, option="G", direction = -1,),
+          main = main,
+          border_color=NA,
+          cluster_cols = cluster_cols,
+          cluster_rows = F,
+          labels_col = labels_col,
+          #clustering_method = clustering_method,
+          na_col = "grey80")
+  return(p)
+}
+
+UMAP_density_plot = function(data,
+                             ggtitle = "UMAP with disease status labels",
+                             legend_name = "Disease status",
+                             labels = clin$Condition,
+                             file_location = "plots/UMAP_condition.pdf",
+                             file_location_labels = "plots/UMAP_condition_labels.pdf",
+                             colour_set = c("seagreen4", "slateblue1", "salmon")){
+      # run umap function
+      umap_out = umap::umap(data)
+      umap_plot = as.data.frame(umap_out$layout)
+
+      #add condition labels
+      umap_plot$group = labels
+
+      # plot umap
+      p1 = ggplot(umap_plot) + geom_point(aes(x=V1, y=V2, color = as.factor(group))) +
+        ggtitle(ggtitle) +
+          theme_few() +
+          scale_colour_few() +
+          scale_color_manual(name = legend_name,
+                           labels = levels(as.factor(umap_plot$group)),
+                           values = colour_set)
+
+      xdens <-
+        axis_canvas(p1, axis = "x") +
+        geom_density(data = umap_plot, aes(x = V1, fill = group, colour = group), alpha = 0.3) +
+        scale_fill_manual( values = colour_set) +
+        scale_colour_manual( values = colour_set)
+      ydens <-
+        axis_canvas(p1, axis = "y", coord_flip = TRUE) +
+        geom_density(data = umap_plot, aes(x = V2, fill = group, colour = group), alpha = 0.3) +
+        coord_flip() +
+        scale_fill_manual(values = colour_set) +
+        scale_colour_manual( values = colour_set)
+      p1 %>%
+        insert_xaxis_grob(xdens, grid::unit(1, "in"), position = "top") %>%
+        insert_yaxis_grob(ydens, grid::unit(1, "in"), position = "right") %>%
+        ggdraw()
+
+      p1
+      # save umap
+      ggsave(file_location, width = 11/2, height = 8/2, units = "in")
+
+      p1 + geom_text(label = rownames(umap_plot), x = umap_plot$V1, y = umap_plot$V2,
+                     hjust = 0, nudge_x = 1, size = 1.5, colour = "grey")
+
+      # save umap with labels
+      ggsave(file_location_labels, width = 11/2, height = 8/2, units = "in")
+      return(p1)
+}
+
+```
+
+#### - CSF
+```{r visualizations-CSF,warning=FALSE,message=FALSE}
+## Distribution of expression values per ID and tube number
+mean_expression_plot(data = t(assay(lipidomics_data_CSF$se)), 
+                      file_sample = "plots/boxplots_expression_each_sample_CSF.pdf",
+                      file_mass = "plots/boxplots_expression_each_lipid_CSF.pdf",
+                      title = "CSF lipidomics")
+
+## Heatmaps
+# CSF
+title = "lipidomics CSF" 
+
+data = assay(lipidomics_data_CSF$se)
+#row annotation
+names_lipids = rownames(data)
+Lipids_final <- read_excel("data input/RE_ metabolomics/Lipids_final.xlsx")
+lipids = Lipids_final %>% 
+  select(Name,Category) %>%
+  filter(Name %in% names_lipids)
+lipids = lipids[match(lipids$Name,names_lipids),]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+rownames(annotation_row) = lipids$Name
+mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+names(mycolors) <- unique(annotation_row$lipid_type)
+annotation_colours <- list(
+  lipid_type = list(mycolors)[[1]])
+        
+#without grouping, all lipids
+p = make_pheatmap(data = data, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap all lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_",title,".pdf"))
+
+#without grouping, filtered lipids
+data = assay(lipidomics_data_CSF$se_filt_norm)
+
+#row annotation
+names_lipids = rownames(data)
+lipids = Lipids_final %>% 
+  select(Name,Category) %>%
+  filter(Name %in% names_lipids)
+lipids = lipids[match(lipids$Name,names_lipids),]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+rownames(annotation_row) = lipids$Name
+mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+names(mycolors) <- unique(annotation_row$lipid_type)
+annotation_colours <- list(
+  lipid_type = list(mycolors)[[1]])
+
+p = make_pheatmap(data = data, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap filtered lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_filtered_",title,".pdf"))
+
+#without grouping, filtered and imputed
+data = assay(lipidomics_data_CSF$se_filt_impute)
+
+#row annotation
+names_lipids = rownames(data)
+lipids = Lipids_final %>% 
+  select(Name,Category) %>%
+  filter(Name %in% names_lipids)
+lipids = lipids[match(lipids$Name,names_lipids),]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+rownames(annotation_row) = lipids$Name
+mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+names(mycolors) <- unique(annotation_row$lipid_type)
+annotation_colours <- list(
+  lipid_type = list(mycolors)[[1]])
+
+p = make_pheatmap(data = data, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap imputed lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_imputed_",title,".pdf"))
+
+# without grouping, 100 most variable lipids
+d = assay(lipidomics_data_CSF$se)
+d2 = head(order(rowVars(d),decreasing = T),100)
+
+data = d[d2,]
+#row annotation
+names_lipids = rownames(data)
+lipids = Lipids_final %>% 
+  select(Name,Category) %>%
+  filter(Name %in% names_lipids)
+lipids = lipids[match(lipids$Name,names_lipids),]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+rownames(annotation_row) = lipids$Name
+mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+names(mycolors) <- unique(annotation_row$lipid_type)
+annotation_colours <- list(
+  lipid_type = list(mycolors)[[1]])
+
+p = make_pheatmap(data = d[d2,], 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap 100 most variable lipids\n",title, "\nnot clustered"),
+                  labels_col = colnames(d))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_mostvar_",title,".pdf"))
+
+## UMAP (with participant status type)
+d_CSF = t(assay(lipidomics_data_CSF$se_filt_impute))
+labels_group = tube_batch_CSF$type
+group = c("mediumpurple1", "darksalmon", "yellow4","blue4","seagreen4")
+UMAP_density_plot(data = d_CSF,
+                          ggtitle = paste0("UMAP with type labels\n", title),
+                          legend_name = "Fluid labels",
+                          labels = labels_group,
+                          file_location = paste0("plots/UMAP_type_",title,".pdf"),
+                          file_location_labels =paste0("plots/UMAP_type_labels_",title,".pdf"),
+                          colour_set = group)
+
+# UMAP (with batch info)
+labels_group = tube_batch_CSF$Batch
+group = c("#3DB7E4", "#FF8849", "#69BE28")
+UMAP_density_plot(data = d_CSF,
+                          ggtitle = paste0("UMAP with batch labels\n", title),
+                          legend_name = "Fluid labels",
+                          labels = labels_group,
+                          file_location = paste0("plots/UMAP_batch_",title,".pdf"),
+                          file_location_labels =paste0("plots/UMAP_batch_labels_",title,".pdf"),
+                          colour_set = group)
+```
+
+#### - Plasma 
+```{r visualizations-plasma,warning=FALSE,message=FALSE}
+## Distribution of expression values per ID and tube number
+mean_expression_plot(data = t(assay(lipidomics_data_plasma$se)), 
+                      file_sample = "plots/boxplots_expression_each_sample_plasma.pdf",
+                      file_mass = "plots/boxplots_expression_each_lipid_plasma.pdf",
+                      title = "plasma lipidomics")
+
+## Heatmaps
+# plasma
+title = "lipidomics plasma" 
+
+data = assay(lipidomics_data_plasma$se)
+#row annotation
+names_lipids = rownames(data)
+Lipids_final <- read_excel("data input/RE_ metabolomics/Lipids_final.xlsx")
+lipids = Lipids_final %>% 
+  select(Name,Category) %>%
+  filter(Name %in% names_lipids)
+lipids = lipids[match(lipids$Name,names_lipids),]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+rownames(annotation_row) = lipids$Name
+mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+names(mycolors) <- unique(annotation_row$lipid_type)
+annotation_colours <- list(
+  lipid_type = list(mycolors)[[1]])
+        
+#without grouping, all lipids
+p = make_pheatmap(data = data, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap all lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_",title,".pdf"))
+
+#without grouping, filtered lipids
+data = assay(lipidomics_data_plasma$se_filt_norm)
+
+#row annotation
+names_lipids = rownames(data)
+lipids = Lipids_final %>% 
+  select(Name,Category) %>%
+  filter(Name %in% names_lipids)
+lipids = lipids[match(lipids$Name,names_lipids),]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+rownames(annotation_row) = lipids$Name
+mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+names(mycolors) <- unique(annotation_row$lipid_type)
+annotation_colours <- list(
+  lipid_type = list(mycolors)[[1]])
+
+p = make_pheatmap(data = data, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap filtered lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_filtered_",title,".pdf"))
+
+#without grouping, filtered and imputed
+data = assay(lipidomics_data_plasma$se_filt_impute)
+
+#row annotation
+names_lipids = rownames(data)
+lipids = Lipids_final %>% 
+  select(Name,Category) %>%
+  filter(Name %in% names_lipids)
+lipids = lipids[match(lipids$Name,names_lipids),]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+rownames(annotation_row) = lipids$Name
+mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+names(mycolors) <- unique(annotation_row$lipid_type)
+annotation_colours <- list(
+  lipid_type = list(mycolors)[[1]])
+
+p = make_pheatmap(data = data, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap imputed lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_imputed_",title,".pdf"))
+
+# without grouping, 100 most variable lipids
+d = assay(lipidomics_data_plasma$se)
+d2 = head(order(rowVars(d),decreasing = T),100)
+
+data = d[d2,]
+#row annotation
+names_lipids = rownames(data)
+lipids = Lipids_final %>% 
+  select(Name,Category) %>%
+  filter(Name %in% names_lipids)
+lipids = lipids[match(lipids$Name,names_lipids),]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+rownames(annotation_row) = lipids$Name
+mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+names(mycolors) <- unique(annotation_row$lipid_type)
+annotation_colours <- list(
+  lipid_type = list(mycolors)[[1]])
+
+p = make_pheatmap(data = d[d2,], 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap 100 most variable lipids\n",title, "\nnot clustered"),
+                  labels_col = colnames(d))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_mostvar_",title,".pdf"))
+
+## UMAP (with participant status type)
+d_plasma = t(assay(lipidomics_data_plasma$se_filt_impute))
+labels_group = tube_batch_plasma$type
+group = c("mediumpurple1", "darksalmon", "yellow4","blue4","seagreen4")
+UMAP_density_plot(data = d_plasma,
+                          ggtitle = paste0("UMAP with type labels\n", title),
+                          legend_name = "Fluid labels",
+                          labels = labels_group,
+                          file_location = paste0("plots/UMAP_type_",title,".pdf"),
+                          file_location_labels =paste0("plots/UMAP_type_labels_",title,".pdf"),
+                          colour_set = group)
+
+# UMAP (with batch info)
+labels_group = tube_batch_plasma$Batch
+group = c("#3DB7E4", "#FF8849", "#69BE28","#757083","#CF7684","#A0C8C0","#CDAE3B")
+UMAP_density_plot(data = d_plasma,
+                          ggtitle = paste0("UMAP with batch labels\n", title),
+                          legend_name = "Fluid labels",
+                          labels = labels_group,
+                          file_location = paste0("plots/UMAP_batch_",title,".pdf"),
+                          file_location_labels =paste0("plots/UMAP_batch_labels_",title,".pdf"),
+                          colour_set = group)
+
+```
+
+- CSF and Plasma together
+```{r visualizations-plasma-CSF,warning=FALSE,message=FALSE}
+ proteins_in_both_fluids = colnames(d_CSF)[colnames(d_CSF) %in% colnames(d_plasma)]
+  
+  d_1 = d_CSF[,proteins_in_both_fluids]
+  d_2 = d_plasma[,proteins_in_both_fluids]
+  
+  d = do.call("rbind",list(d_1,d_2))
+  
+  labels_group = c(rep("CSF", 144), rep("Plasma", 316))
+  title = "plasma_vs_CSF"
+  d <- is.na(d)
+  
+  dim(d)
+
+#perform plots with function
+UMAP_density_plot(data = d,
+                  ggtitle = paste0("UMAP with fluid labels\n", title),
+                  legend_name = "Fluid labels",
+                  labels = labels_group,
+                  file_location = paste0("plots/UMAP_fluid_group_lipids_",title,".pdf"),
+                  file_location_labels=paste0("plots/UMAP_fluid_group_labels_",title,".pdf"),
+                  colour_set = group)
+```
+
+#### Step 8
+
+The **eighth step** is to *perform differential expression analyses*, with particular interest of eALS vs CTR, PGMC vs CTR. For this, the information between IDs and the status (eALS, CTR, PGMC, mimic) have to be collected from other datasets 
 
