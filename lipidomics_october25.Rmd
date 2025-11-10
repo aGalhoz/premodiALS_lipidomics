@@ -40,13 +40,25 @@ library(rmarkdown)
 library(tidyr)
 library(Polychrome)
 library(RColorBrewer)
-# library(stringr)
-# library(MetaboAnalystR)
-# library(matrixStats)
-# library(wesanderson)
-# library(clusterProfiler)
-# library(enrichplot)
-# library(msigdbr)
+# install.packages("devtools")
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# options(repos = c(
+#     CRAN = "https://cloud.r-project.org/",
+#     BiocManager::repositories()))
+# ## Install dependencies and package
+# devtools::install_github(
+#     "BioinfOMICS/LipidSigR",
+#     build_vignettes = TRUE, dependencies = TRUE)
+# BiocManager::install(
+#     c('fgsea', 'gatom', 'mixOmics', 'S4Vectors', 'BiocGenerics',
+#       'SummarizedExperiment', 'rgoslin'))
+# install.packages(
+#     c('devtools', 'magrittr', 'plotly', 'tidyverse', 'factoextra', 'ggthemes',
+#       'ggforce', 'Hmisc', 'hwordcloud', 'heatmaply', 'iheatmapr', 'Rtsne', 'uwot',
+#       'wordcloud', 'rsample', 'ranger', 'caret', 'yardstick', 'fastshap',
+#       'SHAPforxgboost', 'visNetwork', 'tidygraph', 'ggraph'))
+# devtools::install_github("ctlab/mwcsr")
 ```
 
 ## Set working directories
@@ -242,12 +254,15 @@ lipidomics_CSF_4_aux1 <- lipidomics_CSF_4 %>% left_join(info_patientID_4) %>%
   select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
   mutate(Box = "Box 4")
 lipidomics_CSF_4_aux2 <- lipidomics_CSF_4 %>% 
-  left_join(info_patientID_4_aux %>% select(Tube_nr,Position,Patient,Biofluid,Visit) %>%
+  select(-Country) %>%
+  left_join(info_patientID_4_aux %>% select(Tube_nr,Position,Patient,Biofluid,Visit,Country) %>%
               mutate(Tube_nr = ifelse(Tube_nr == "nothing",NA,Tube_nr))) %>%
   mutate(Tube_number = ifelse(!is.na(Tube_nr),Tube_nr,Tube_number)) %>%
   select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
   mutate(Box = "Box 4") %>%
-  distinct()
+  distinct() %>%
+  arrange(desc(Country))
+lipidomics_CSF_4_aux2 =  lipidomics_CSF_4_aux2[!duplicated(lipidomics_CSF_4_aux2$Patient) | is.na(lipidomics_CSF_4_aux2$Patient),]
 lipidomics_CSF_4 = rbind(lipidomics_CSF_4_aux1,
                          lipidomics_CSF_4_aux2) %>%
   arrange(str_extract(Position, "[A-Z]"), as.numeric(str_extract(Position, "\\d+"))) %>%
@@ -273,13 +288,16 @@ lipidomics_plasma_4_aux1 <- lipidomics_plasma_4 %>% left_join(info_patientID_4) 
   select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
   mutate(Box = "Box 4")
 lipidomics_plasma_4_aux2 <- lipidomics_plasma_4 %>% 
-  left_join(info_patientID_4_aux %>% dplyr::select(Tube_nr,Position,Patient,Biofluid,Visit) %>%
+  select(-Country) %>%
+  left_join(info_patientID_4_aux %>% select(Tube_nr,Position,Patient,Biofluid,Visit,Country) %>%
               mutate(Tube_nr = ifelse(Tube_nr == "nothing",NA,Tube_nr),
                      Biofluid = ifelse(Biofluid == "Plasma","plasma",Biofluid))) %>%
   mutate(Tube_number = ifelse(!is.na(Tube_nr),Tube_nr,Tube_number)) %>%
   select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
   mutate(Box = "Box 4") %>%
-  distinct()
+  distinct() %>%
+  arrange(desc(Country))
+lipidomics_plasma_4_aux2 =  lipidomics_plasma_4_aux2[!duplicated(lipidomics_plasma_4_aux2$Patient) | is.na(lipidomics_plasma_4_aux2$Patient),]
 lipidomics_plasma_4 = rbind(lipidomics_plasma_4_aux1,
                          lipidomics_plasma_4_aux2) %>%
   arrange(str_extract(Position, "[A-Z]"), as.numeric(str_extract(Position, "\\d+"))) %>%
@@ -311,7 +329,9 @@ lipidomics_urine_4_aux2 <- lipidomics_urine_4 %>%
   mutate(Tube_number = ifelse(!is.na(Tube_nr),Tube_nr,Tube_number)) %>%
   select(Patient,Position,Biofluid,Visit,Tube_number,Country,Rack) %>%
   mutate(Box = "Box 4") %>%
-  distinct()
+  distinct() %>%
+  arrange(desc(Country))
+lipidomics_urine_4_aux2 =  lipidomics_urine_4_aux2[!duplicated(lipidomics_urine_4_aux2$Patient) | is.na(lipidomics_urine_4_aux2$Patient),]
 lipidomics_urine_4 = rbind(lipidomics_urine_4_aux1,
                          lipidomics_urine_4_aux2) %>%
   arrange(str_extract(Position, "[A-Z]"), as.numeric(str_extract(Position, "\\d+"))) %>%
@@ -392,7 +412,7 @@ paged_table(lipidomics_CSF_all_V0 %>%
 
 # check which Patient IDs are duplicated at V0
 paged_table(lipidomics_CSF_all_V0 %>%
-  filter(Patient %in% lipidomics_CSF_all_V0[duplicated(lipidomics_CSF_all_V0$Patient),]$Patient))
+  filter(Patient %in% lipidomics_CSF_all_V0[duplicated(lipidomics_CSF_all_V0$Patient) & !is.na(lipidomics_CSF_all_V0$Patient),]$Patient))
 
 # which tube IDs are missing for Patient IDs at V1
 lipidomics_CSF_all_V1 = lipidomics_CSF_all %>%
@@ -402,7 +422,7 @@ paged_table(lipidomics_CSF_all_V1 %>%
 
 # check which Patient IDs are duplicated at V1
 paged_table(lipidomics_CSF_all_V1 %>%
-  filter(Patient %in% lipidomics_CSF_all_V1[duplicated(lipidomics_CSF_all_V1$Patient),]$Patient))
+  filter(Patient %in% lipidomics_CSF_all_V1[duplicated(lipidomics_CSF_all_V1$Patient) & !is.na(lipidomics_CSF_all_V1$Patient),]$Patient))
 
 ```
 
@@ -428,7 +448,7 @@ paged_table(lipidomics_plasma_all_V0 %>%
 
 # check which Patient IDs are duplicated at V0
 paged_table(lipidomics_plasma_all_V0 %>%
-  filter(Patient %in% lipidomics_plasma_all_V0[duplicated(lipidomics_plasma_all_V0$Patient),]$Patient))
+  filter(Patient %in% lipidomics_plasma_all_V0[duplicated(lipidomics_plasma_all_V0$Patient) & !is.na(lipidomics_plasma_all_V0$Patient),]$Patient))
 
 # which tube IDs are missing for Patient IDs at V1
 lipidomics_plasma_all_V1 = lipidomics_plasma_all %>%
@@ -438,7 +458,7 @@ paged_table(lipidomics_plasma_all_V1 %>%
 
 # check which Patient IDs are duplicated at V1
 paged_table(lipidomics_plasma_all_V1 %>%
-  filter(Patient %in% lipidomics_plasma_all_V1[duplicated(lipidomics_plasma_all_V1$Patient),]$Patient))
+  filter(Patient %in% lipidomics_plasma_all_V1[duplicated(lipidomics_plasma_all_V1$Patient) & !is.na(lipidomics_plasma_all_V1$Patient),]$Patient))
 ```
 
 #### - Urine
@@ -463,7 +483,7 @@ paged_table(lipidomics_urine_all_V0 %>%
 
 # check which Patient IDs are duplicated at V0
 paged_table(lipidomics_urine_all_V0 %>%
-  filter(Patient %in% lipidomics_urine_all_V0[duplicated(lipidomics_urine_all_V0$Patient),]$Patient))
+  filter(Patient %in% lipidomics_urine_all_V0[duplicated(lipidomics_urine_all_V0$Patient) & !is.na(lipidomics_urine_all_V0$Patient),]$Patient))
 
 # which tube IDs are missing for Patient IDs at V1
 lipidomics_urine_all_V1 = lipidomics_urine_all %>%
@@ -473,7 +493,7 @@ paged_table(lipidomics_urine_all_V1 %>%
 
 # check which Patient IDs are duplicated at V1
 paged_table(lipidomics_urine_all_V1 %>%
-  filter(Patient %in% lipidomics_urine_all_V1[duplicated(lipidomics_urine_all_V1$Patient),]$Patient))
+  filter(Patient %in% lipidomics_urine_all_V1[duplicated(lipidomics_urine_all_V1$Patient) & !is.na(lipidomics_urine_all_V1$Patient),]$Patient))
 ```
 
 ### Step 2: aggregate all raw files 
@@ -705,6 +725,14 @@ mimic_ID <- GeneralDocumentation %>%
   select(PatientID,ParticipantCode) %>% 
   mutate(type = "mimic")
 
+# -> SYMP
+SYMP_ID <- GeneralDocumentation %>%
+  filter(PGMC == 3 & ALSuncertainty == 3 & ALSFUdiagnosis %in% c(3,NA)) %>%
+  select(PatientID,ParticipantCode) %>% 
+  mutate(type = "SYMP")
+
+NA_ID <- data.frame(PatientID = NA, ParticipantCode = "DENa1",type = "N.A.")
+
 # PGMC IDs with mutations
 PGMC_mutations_ID <- GeneralDocumentation %>%
   select(PatientID, ParticipantCode,PGMC,contains("MutationType")) %>%
@@ -726,6 +754,8 @@ all_participants_IDs = do.call("rbind",
                                     ALS_ID,
                                     PGMC_ID,
                                     mimic_ID,
+                                    SYMP_ID,
+                                    NA_ID,
                                     PGMC_mutations_ID))
 writexl::write_xlsx(all_participants_IDs,"results/all_participants_IDs.xlsx")
 
@@ -736,13 +766,15 @@ writexl::write_xlsx(all_participants_IDs,"results/all_participants_IDs.xlsx")
 # IDs in CSF (131)
 IDs_CSF <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/CSFAcquisition.csv",
                           delim = ";", escape_double = FALSE, trim_ws = TRUE) %>%
-  filter(CsfSexists == 1) %>% pull(PatientID) %>% unique()
-IDs_CSF_data_1 = GeneralDocumentation %>%
-  select(PatientID,ParticipantCode) %>%
-  filter(PatientID %in% IDs_CSF) %>%
+  filter(CsfSexists == 1) %>%
+  group_by(PatientID) %>%
+  mutate(Visit = paste0("V", row_number() - 1)) %>%
+  ungroup() %>% 
+  select(PatientID,Visit) %>% 
+  distinct()
+IDs_CSF_data_1 = IDs_CSF %>%
+  left_join(GeneralDocumentation %>% select(PatientID,ParticipantCode)) %>%
   dplyr::rename(Patient = ParticipantCode) %>%
-  left_join(lipidomics_CSF_all) %>%
-  select(Patient,Visit,Position) %>%
   distinct() %>%
   left_join(all_participants_IDs %>% dplyr::rename(Patient = ParticipantCode)) %>%
   mutate(
@@ -752,6 +784,7 @@ IDs_CSF_data_1 = GeneralDocumentation %>%
       grepl("DE", Patient) ~ "Germany",
       grepl("SK", Patient) ~ "Slovakia",
       grepl("FR", Patient) ~ "France",
+      grepl("IL", Patient) ~ "Israel",
       TRUE                 ~ NA_character_
     )) %>%
   arrange(Patient)
@@ -773,7 +806,7 @@ overview_status_CSF_1 = IDs_CSF_data_1 %>%
     names_from  = type,        
     values_from = nr_samples,  
     values_fill = 0) %>%
-  select(Visit,Country,PGMC,CTR,ALS,mimic,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
+  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
 overview_status_CSF_1
 
 ```
@@ -791,6 +824,7 @@ IDs_CSF_data = combined_data_CSF %>%
       grepl("DE", Patient) ~ "Germany",
       grepl("SK", Patient) ~ "Slovakia",
       grepl("FR", Patient) ~ "France",
+      grepl("IL", Patient) ~ "Israel",
       TRUE                 ~ NA_character_
     )) %>%
   arrange(Patient)
@@ -812,7 +846,7 @@ overview_status_CSF = IDs_CSF_data %>%
     names_from  = type,        
     values_from = nr_samples,  
     values_fill = 0) %>%
-  select(Visit,Country,PGMC,CTR,ALS,mimic,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
+  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,N.A.,`NA`)
 overview_status_CSF
 
 ```
@@ -822,14 +856,16 @@ overview_status_CSF
 # IDs in plasma (235)
 IDs_plasma <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/BloodAcquisition.csv",
                           delim = ";", escape_double = FALSE, trim_ws = TRUE) %>%
-  filter(BAexists == 1) %>% pull(PatientID) %>% unique()
+  filter(BAexists == 1) %>% 
+  group_by(PatientID) %>%
+  mutate(Visit = paste0("V", row_number() - 1)) %>%
+  ungroup() %>% 
+  select(PatientID,Visit) %>% 
+  distinct()
 
-IDs_plasma_data_1 = GeneralDocumentation %>%
-  select(PatientID,ParticipantCode) %>%
-  filter(PatientID %in% IDs_plasma) %>%
+IDs_plasma_data_1 = IDs_plasma %>%
+  left_join(GeneralDocumentation %>% select(PatientID,ParticipantCode)) %>%
   dplyr::rename(Patient = ParticipantCode) %>%
-  left_join(lipidomics_plasma_all) %>%
-  select(Patient,Visit,Position) %>%
   distinct() %>%
   left_join(all_participants_IDs %>% dplyr::rename(Patient = ParticipantCode)) %>%
   mutate(
@@ -839,6 +875,7 @@ IDs_plasma_data_1 = GeneralDocumentation %>%
       grepl("DE", Patient) ~ "Germany",
       grepl("SK", Patient) ~ "Slovakia",
       grepl("FR", Patient) ~ "France",
+      grepl("IL", Patient) ~ "Israel",
       TRUE                 ~ NA_character_
     )) %>%
   arrange(Patient)
@@ -860,7 +897,7 @@ overview_status_plasma_1 = IDs_plasma_data_1 %>%
     names_from  = type,        
     values_from = nr_samples,  
     values_fill = 0) %>%
-  select(Visit,Country,PGMC,CTR,ALS,mimic,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
+  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
 overview_status_plasma_1
 
 ```
@@ -878,6 +915,7 @@ IDs_plasma_data = combined_data_plasma %>%
       grepl("DE", Patient) ~ "Germany",
       grepl("SK", Patient) ~ "Slovakia",
       grepl("FR", Patient) ~ "France",
+      grepl("IL", Patient) ~ "Israel",
       TRUE                 ~ NA_character_
     )) %>%
   arrange(Patient)
@@ -899,7 +937,7 @@ overview_status_plasma = IDs_plasma_data %>%
     names_from  = type,        
     values_from = nr_samples,  
     values_fill = 0) %>%
-  select(Visit,Country,PGMC,CTR,ALS,mimic,C9orf72,SOD1,TARDBP,FUS,other,`NA`)
+  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,N.A.,`NA`)
 overview_status_plasma
 
 ```
@@ -1350,7 +1388,7 @@ save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_mostvar_",title,".pdf"
 ## UMAP (with participant status type)
 d_CSF = t(assay(lipidomics_data_CSF$se_filt_impute))
 labels_group = tube_batch_CSF$type
-group = c("mediumpurple1", "darksalmon", "yellow4","blue4","seagreen4")
+group = c("mediumpurple1", "darksalmon", "yellow4","blue4","seagreen4","orange3")
 UMAP_density_plot(data = d_CSF,
                           ggtitle = paste0("UMAP with type labels\n", title),
                           legend_name = "Fluid labels",
@@ -1479,7 +1517,7 @@ save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_mostvar_",title,".pdf"
 ## UMAP (with participant status type)
 d_plasma = t(assay(lipidomics_data_plasma$se_filt_impute))
 labels_group = tube_batch_plasma$type
-group = c("mediumpurple1", "darksalmon", "yellow4","blue4","seagreen4")
+group = c("mediumpurple1", "darksalmon", "yellow4","blue4","seagreen4","orange3")
 UMAP_density_plot(data = d_plasma,
                           ggtitle = paste0("UMAP with type labels\n", title),
                           legend_name = "Fluid labels",
