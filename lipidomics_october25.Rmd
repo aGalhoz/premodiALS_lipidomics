@@ -40,6 +40,8 @@ library(rmarkdown)
 library(tidyr)
 library(Polychrome)
 library(RColorBrewer)
+library(skimr)
+library(rstatix)
 # install.packages("devtools")
 # if (!require("BiocManager", quietly = TRUE))
 #     install.packages("BiocManager")
@@ -64,7 +66,7 @@ library(RColorBrewer)
 ## Set working directories
 
 ```{r set-working-directories, message=FALSE, class.source = 'fold-hide'}
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 # create directory for results
 dir.create(file.path(getwd(),'results'), showWarnings = FALSE)
@@ -736,16 +738,31 @@ NA_ID <- data.frame(PatientID = NA, ParticipantCode = "DENa1",type = "N.A.")
 # PGMC IDs with mutations
 PGMC_mutations_ID <- GeneralDocumentation %>%
   select(PatientID, ParticipantCode,PGMC,contains("MutationType")) %>%
-  filter(PGMC==1)
+  filter(PatientID %in% PGMC_ID$PatientID)
 PGMC_mutations_ID_tmp <- sapply(apply(PGMC_mutations_ID[,4:17],1,
                                   function(x){which(x == 1)}) %>% unique(), function(x) x + 3)
 PGMC_mutations_ID <- PGMC_mutations_ID[,c(1,2,unlist(PGMC_mutations_ID_tmp))]
 PGMC_mutations_ID <- PGMC_mutations_ID %>%
   mutate(type = ifelse(MutationTypeC9orf72 == 1,"C9orf72",
                        ifelse(MutationTypeSOD1 == 1,"SOD1",
+                              ifelse(MutationTypeFUS == 1, "FUS",
                               ifelse(MutationTypeTARDBP == 1,"TARDBP",
-                                     ifelse(MutationTypeFUS==1,"FUS",
-                                            ifelse(MutationTypeOther==1 | MutationTypeFIG4==1 | MutationTypeUBQLN2==1,"other",NA)))))) %>%
+                                            ifelse(MutationTypeOther==1 | MutationTypeUBQLN2==1 | MutationTypeFIG4==1 ,"other",NA)))))) %>%
+  select(PatientID,ParticipantCode,type) %>%
+  filter(!is.na(type))
+
+# ALS IDs with mutations
+ALS_mutations_ID <- GeneralDocumentation %>%
+  select(PatientID, ParticipantCode,PGMC,contains("MutationType")) %>%
+  filter(PatientID %in% ALS_ID$PatientID)
+ALS_mutations_ID_tmp <- sapply(apply(ALS_mutations_ID[,4:17],1,
+                                  function(x){which(x == 1)}) %>% unique(), function(x) x + 3)
+ALS_mutations_ID <- ALS_mutations_ID[,c(1,2,4,5,6,8,17)]
+ALS_mutations_ID <- ALS_mutations_ID %>%
+  mutate(type = ifelse(MutationTypeC9orf72 == 1,"C9orf72",
+                       ifelse(MutationTypeSOD1 == 1,"SOD1",
+                              ifelse(MutationTypeTARDBP == 1,"TARDBP",
+                                            ifelse(MutationTypeOther==1 | MutationTypeFIG4==1 ,"other",NA))))) %>%
   select(PatientID,ParticipantCode,type) %>%
   filter(!is.na(type))
 
@@ -759,10 +776,27 @@ all_participants_IDs = do.call("rbind",
                                     PGMC_mutations_ID))
 writexl::write_xlsx(all_participants_IDs,"results/all_participants_IDs.xlsx")
 
+# Get info of sex and age for all participants
+participants_PGMC = read_excel("data input/recruited participants.xlsx", 
+                               sheet = "Total PGMC") %>%
+  select(Pseudonyme,sex,age) 
+participants_CTR = read_excel("data input/recruited participants.xlsx", 
+                              sheet = "Total Control") %>%
+  dplyr::select(Pseudonyme,Sex,`Age...7`) %>%
+  dplyr::rename(sex = Sex,
+         age = `Age...7`)
+participants_ALS_mimic = read_excel("data input/recruited participants.xlsx", 
+                                    sheet = "Total EALS-Mimics") %>%
+  dplyr::select(Pseudonyme,Sex,`Age...7`) %>%
+  dplyr::rename(sex = Sex,
+         age = `Age...7`)
+Sex_age_all_participants = do.call("rbind",list(participants_PGMC,
+                                                participants_CTR,
+                                                participants_ALS_mimic))
 ```
 
-#### - CSF (the patient IDs given by Laura)
-```{r overview-IDs-CSF-Laura, message=F,warning=FALSE}
+#### - CSF (the patient IDs given by Laura) - not displaying, but it is in code
+```{r overview-IDs-CSF-Laura, message=F,warning=FALSE, echo = FALSE}
 # IDs in CSF (131)
 IDs_CSF <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/CSFAcquisition.csv",
                           delim = ";", escape_double = FALSE, trim_ws = TRUE) %>%
@@ -846,13 +880,83 @@ overview_status_CSF = IDs_CSF_data %>%
     names_from  = type,        
     values_from = nr_samples,  
     values_fill = 0) %>%
-  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,N.A.,`NA`)
+  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,N.A.) %>%
+  arrange(Visit,Country)
 overview_status_CSF
 
+# Date info
+date_CTR <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "CTR",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "CTR")
+date_ALS <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "ALS",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "ALS")
+date_mimic <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "mimic",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "mimic")
+date_PGMC <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "PGMC",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "PGMC")
+date_SYMP <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "SYMP",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "SYMP")
+date_NA = data.frame(Pseudonyme = "6H1HR8R7",age = 58,patient_group = "N.A.")
+
+skim(date_CTR)
+skim(date_ALS)
+skim(date_mimic)
+skim(date_PGMC)
+skimr::skim(date_NA)
+skimr::skim(date_SYMP)
+
+date_all <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC,date_SYMP,date_NA))
+
+# -> Kruskal Wallis test between samples
+kruskal_test(data = date_all,age~patient_group)
+dunn_test(data = date_all,age~patient_group)
+
+## Sex analysis
+Sex_CTR <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "CTR",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "CTR")
+Sex_ALS <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "ALS",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "ALS")
+Sex_mimic <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "mimic",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "mimic")
+Sex_PGMC <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "PGMC",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "PGMC")
+Sex_SYMP <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "SYMP",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "SYMP")
+Sex_NA = data.frame(Pseudonyme = "6H1HR8R7",sex = "F",patient_group = "N.A.")
+
+Sex_all <- do.call("rbind",list(Sex_ALS,
+                                Sex_CTR,
+                                Sex_mimic,
+                                Sex_PGMC,
+                                Sex_SYMP,
+                                Sex_NA))
+Sex_all <- Sex_all %>% filter(!is.na(sex))
+table(Sex_all$patient_group,Sex_all$sex)
+fisher.test(Sex_all$patient_group,Sex_all$sex)
+pairwise_fisher_test(table(Sex_all$patient_group,Sex_all$sex), p.adjust.method = "holm")
 ```
 
-#### - Plasma (the patient IDs given by Laura)
-```{r overview-IDs-Plasma-Laura, message=F,warning=FALSE}
+#### - Plasma (the patient IDs given by Laura) - not displaying, but it is in code
+```{r overview-IDs-Plasma-Laura, message=F,warning=FALSE, echo=FALSE}
 # IDs in plasma (235)
 IDs_plasma <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/BloodAcquisition.csv",
                           delim = ";", escape_double = FALSE, trim_ws = TRUE) %>%
@@ -937,9 +1041,184 @@ overview_status_plasma = IDs_plasma_data %>%
     names_from  = type,        
     values_from = nr_samples,  
     values_fill = 0) %>%
-  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,N.A.,`NA`)
+  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,N.A.) %>%
+  arrange(Visit,Country)
 overview_status_plasma
 
+# Date info
+date_CTR <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "CTR",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "CTR")
+date_ALS <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "ALS")
+date_mimic <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "mimic",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "mimic")
+date_PGMC <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "PGMC",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "PGMC")
+date_SYMP <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "SYMP",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "SYMP")
+date_NA = data.frame(Pseudonyme = "6H1HR8R7",age = 58,patient_group = "N.A.")
+
+skim(date_CTR)
+skim(date_ALS)
+skim(date_mimic)
+skim(date_PGMC)
+skimr::skim(date_NA)
+skimr::skim(date_SYMP)
+
+date_all <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC,date_SYMP,date_NA))
+
+# -> Kruskal Wallis test between samples
+kruskal_test(data = date_all,age~patient_group)
+dunn_test(data = date_all,age~patient_group)
+
+## Sex analysis
+Sex_CTR <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "CTR",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "CTR")
+Sex_ALS <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "ALS")
+Sex_mimic <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "mimic",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "mimic")
+Sex_PGMC <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "PGMC",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "PGMC")
+Sex_SYMP <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "SYMP",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "SYMP")
+Sex_NA = data.frame(Pseudonyme = "6H1HR8R7",sex = "F",patient_group = "N.A.")
+
+Sex_all <- do.call("rbind",list(Sex_ALS,
+                                Sex_CTR,
+                                Sex_mimic,
+                                Sex_PGMC,
+                                Sex_SYMP,
+                                Sex_NA))
+Sex_all <- Sex_all %>% filter(!is.na(sex))
+table(Sex_all$patient_group,Sex_all$sex)
+fisher.test(Sex_all$patient_group,Sex_all$sex)
+pairwise_fisher_test(table(Sex_all$patient_group,Sex_all$sex), p.adjust.method = "holm")
+
+```
+
+#### - CSF & Plasma (patient IDs in both raw CSF and Plasma data)
+```{r overview-IDs-CSF-Plasma-raw-data, message=F,warning=FALSE}
+IDs_CSF_plasma_data = rbind(IDs_CSF_data,
+                            IDs_plasma_data) %>%
+  select(-Tube_number) %>%
+  distinct()
+
+overview_country_CSF_plasma = IDs_CSF_plasma_data %>%
+  group_by(Visit,Country) %>%
+  summarise(n_unique_patients = n_distinct(Patient),.groups = "drop") %>%
+  arrange(Visit,desc(n_unique_patients))
+overview_country_CSF_plasma
+
+overview_status_CSF_plasma = IDs_CSF_plasma_data %>%
+  group_by(type,Visit,Country) %>% 
+  distinct() %>%
+  summarise(nr_samples = n_distinct(Patient)) %>%
+  select(type, Visit,Country,nr_samples) %>%
+  pivot_wider(
+    names_from  = type,        
+    values_from = nr_samples,  
+    values_fill = 0) %>%
+  select(Visit,Country,PGMC,CTR,ALS,mimic,SYMP,C9orf72,SOD1,TARDBP,FUS,other,N.A.) %>%
+  arrange(Visit,Country)
+overview_status_CSF_plasma
+
+# overview of ALS mutations
+ALS_mutations_ID %>%
+    select(PatientID,type) %>%
+    filter(PatientID %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
+  arrange(type)
+
+# Date info
+date_CTR <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "CTR",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "CTR")
+date_ALS <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "ALS")
+date_mimic <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "mimic",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "mimic")
+date_PGMC <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "PGMC",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "PGMC")
+date_SYMP <- Sex_age_all_participants %>%
+  select(Pseudonyme,age) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "SYMP",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "SYMP")
+date_NA = data.frame(Pseudonyme = "6H1HR8R7",age = 58,patient_group = "N.A.")
+
+skim(date_CTR)
+skim(date_ALS)
+skim(date_mimic)
+skim(date_PGMC)
+skimr::skim(date_NA)
+skimr::skim(date_SYMP)
+
+#date_all <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC,date_SYMP,date_NA))
+date_all <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC))
+
+# -> Kruskal Wallis test between samples
+kruskal_test(data = date_all,age~patient_group)
+dunn_test(data = date_all,age~patient_group)
+
+## Sex analysis
+Sex_CTR <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "CTR",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "CTR")
+Sex_ALS <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "ALS")
+Sex_mimic <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "mimic",]$PatientID %>%unique()))) %>%
+  mutate(patient_group = "mimic")
+Sex_PGMC <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "PGMC",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "PGMC")
+Sex_SYMP <- Sex_age_all_participants %>%
+  select(Pseudonyme,sex) %>%
+  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "SYMP",]$PatientID %>%unique())))  %>%
+  mutate(patient_group = "SYMP")
+Sex_NA = data.frame(Pseudonyme = "6H1HR8R7",sex = "F",patient_group = "N.A.")
+
+Sex_all <- do.call("rbind",list(Sex_ALS,
+                                Sex_CTR,
+                                Sex_mimic,
+                                Sex_PGMC))
+                                # Sex_SYMP,
+                                # Sex_NA))
+Sex_all <- Sex_all %>% filter(!is.na(sex))
+table(Sex_all$patient_group,Sex_all$sex)
+fisher.test(Sex_all$patient_group,Sex_all$sex)
+pairwise_fisher_test(table(Sex_all$patient_group,Sex_all$sex), p.adjust.method = "holm")
 ```
 
 ## Bioinformatic analyses
@@ -1206,17 +1485,17 @@ save_pheatmap_pdf <- function(x, filename, width=11, height=8) {
    dev.off()
 }
         
-make_pheatmap <- function(data, cluster_cols = T, main = "Heatmap", clustering_method = "ward.D", show_rownames = T,labels_col = clin$label){
+make_pheatmap <- function(data, cluster_cols = T, main = "Heatmap", clustering_method = "ward.D", show_rownames = T,labels_col = clin$label,color){
   p = pheatmap::pheatmap(data, name = "expression", cutree_cols = 1,
           show_colnames = T,
           show_rownames = show_rownames,
           fontsize = 4,
           fontsize_col = 4,
           fontsize_row = 2, 
-          #annotation_col = annotation,
+          annotation_col = annotation_col,
           annotation_colors = annotation_colours,
           annotation_row = annotation_row,
-          color = viridis::viridis(100, option="G", direction = -1,),
+          color = color,
           main = main,
           border_color=NA,
           cluster_cols = cluster_cols,
@@ -1293,97 +1572,193 @@ mean_expression_plot(data = t(assay(lipidomics_data_CSF$se)),
 title = "lipidomics CSF" 
 
 data = assay(lipidomics_data_CSF$se)
+data_z = t(scale(t(data),center = TRUE,scale = TRUE))
+data_z[is.na(data_z)] <- 0
+
 #row annotation
 names_lipids = rownames(data)
 Lipids_final <- read_excel("data input/RE_ metabolomics/Lipids_final.xlsx")
 lipids = Lipids_final %>% 
-  select(Name,Category) %>%
+  select(Name,Class) %>%
   filter(Name %in% names_lipids)
 lipids = lipids[match(lipids$Name,names_lipids),]
-annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+lipids_overview = lipids %>%
+  group_by(Class) %>%
+  summarise(n_lipids = n()) %>%
+  arrange(desc(n_lipids))
+writexl::write_xlsx(lipids_overview,"results/lipids_overview.xlsx")
+annotation_row = data.frame(lipid_type = as.factor(lipids$Class))
 rownames(annotation_row) = lipids$Name
-mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+participant_type = tube_batch_CSF
+annotation_col = data.frame(type = as.factor(lipidomics_data_CSF$se$condition))
+rownames(annotation_col) = lipidomics_data_CSF$se$ID
+annotation_col$type <- factor(
+  annotation_col$type,
+  levels = c("ALS","PGMC","CTR","mimic","SYMP", "N.A."))
+colors_type = c("mediumpurple1", "darksalmon", "yellow4","blue4","seagreen4","orange3")
+names(colors_type) = c("ALS","CTR","mimic","N.A.","PGMC","SYMP")
+mycolors = colorRampPalette(brewer.pal(9, "Set1"))(length(unique(annotation_row$lipid_type)))
 names(mycolors) <- unique(annotation_row$lipid_type)
 annotation_colours <- list(
-  lipid_type = list(mycolors)[[1]])
-        
-#without grouping, all lipids
+  lipid_type = mycolors,
+  type = colors_type)
+
+# order data
+row_order <- order(annotation_row$lipid_type)  
+col_order <- order(annotation_col$type)
+data          <- data[row_order, col_order]
+data_z          <- data_z[row_order, col_order]
+annotation_row <- annotation_row[row_order, , drop = FALSE]
+annotation_col <- annotation_col[col_order, , drop = FALSE]
+
+#without grouping, all lipids, expression data
 p = make_pheatmap(data = data, 
                   cluster_cols = F, 
                   main = paste0("Heatmap all lipids\n",title, "\n not clustered"), 
                   show_rownames = F,
-                  labels_col = colnames(data))
+                  labels_col = colnames(data),
+                  #color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  color = viridis::magma(100, direction = -1))
 save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_",title,".pdf"))
+
+#without grouping, all lipids, z-score
+p = make_pheatmap(data = data_z, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap all lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data),
+                  color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  #color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_zscore_raw_",title,".pdf"))
 
 #without grouping, filtered lipids
 data = assay(lipidomics_data_CSF$se_filt_norm)
+data_z = t(scale(t(data),center = TRUE,scale = TRUE))
+data_z[is.na(data_z)] <- 0
 
 #row annotation
 names_lipids = rownames(data)
 lipids = Lipids_final %>% 
-  select(Name,Category) %>%
+  select(Name,Class) %>%
   filter(Name %in% names_lipids)
-lipids = lipids[match(lipids$Name,names_lipids),]
-annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+idx <- match(names_lipids, lipids$Name)
+keep <- !is.na(idx)
+lipids <- lipids[idx[keep], ]
+data   <- data[keep, , drop = FALSE]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Class))
 rownames(annotation_row) = lipids$Name
-mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
-names(mycolors) <- unique(annotation_row$lipid_type)
-annotation_colours <- list(
-  lipid_type = list(mycolors)[[1]])
 
+# order data
+row_order <- order(annotation_row$lipid_type)  
+data          <- data[row_order, col_order]
+data_z          <- data_z[row_order, col_order]
+annotation_row <- annotation_row[row_order, , drop = FALSE]
+
+# expression data
 p = make_pheatmap(data = data, 
                   cluster_cols = F, 
                   main = paste0("Heatmap filtered lipids\n",title, "\n not clustered"), 
                   show_rownames = F,
-                  labels_col = colnames(data))
+                  labels_col = colnames(data),
+                  #color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  color = viridis::magma(100, direction = -1))
 save_pheatmap_pdf(p, filename = paste0("plots/heatmap_filtered_",title,".pdf"))
+
+# z-score
+p = make_pheatmap(data = data_z, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap filtered lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data),
+                  color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  #color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_zscore_filtered_",title,".pdf"))
 
 #without grouping, filtered and imputed
 data = assay(lipidomics_data_CSF$se_filt_impute)
+data_z = t(scale(t(data),center = TRUE,scale = TRUE))
+data_z[is.na(data_z)] <- 0
 
 #row annotation
 names_lipids = rownames(data)
 lipids = Lipids_final %>% 
-  select(Name,Category) %>%
+  select(Name,Class) %>%
   filter(Name %in% names_lipids)
-lipids = lipids[match(lipids$Name,names_lipids),]
-annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+idx <- match(names_lipids, lipids$Name)
+keep <- !is.na(idx)
+lipids <- lipids[idx[keep], ]
+data   <- data[keep, , drop = FALSE]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Class))
 rownames(annotation_row) = lipids$Name
-mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
-names(mycolors) <- unique(annotation_row$lipid_type)
-annotation_colours <- list(
-  lipid_type = list(mycolors)[[1]])
 
+# order data
+row_order <- order(annotation_row$lipid_type)  
+data          <- data[row_order, col_order]
+data_z          <- data_z[row_order, col_order]
+annotation_row <- annotation_row[row_order, , drop = FALSE]
+
+# expression data
 p = make_pheatmap(data = data, 
                   cluster_cols = F, 
                   main = paste0("Heatmap imputed lipids\n",title, "\n not clustered"), 
                   show_rownames = F,
-                  labels_col = colnames(data))
+                  labels_col = colnames(data),
+                  #color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  color = viridis::magma(100, direction = -1))
 save_pheatmap_pdf(p, filename = paste0("plots/heatmap_imputed_",title,".pdf"))
 
-# without grouping, 100 most variable lipids
-d = assay(lipidomics_data_CSF$se)
-d2 = head(order(rowVars(d),decreasing = T),100)
+# z-score
+p = make_pheatmap(data = data_z, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap imputed lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data),
+                  color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  #color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_zscore_imputed_",title,".pdf"))
 
+# without grouping, 100 most variable lipids
+d = assay(lipidomics_data_CSF$se_filt_impute)
+d2 = head(order(rowVars(d),decreasing = T),100)
 data = d[d2,]
+data_z = t(scale(t(data),center = TRUE,scale = TRUE))
+data_z[is.na(data_z)] <- 0
+
 #row annotation
 names_lipids = rownames(data)
 lipids = Lipids_final %>% 
-  select(Name,Category) %>%
+  select(Name,Class) %>%
   filter(Name %in% names_lipids)
-lipids = lipids[match(lipids$Name,names_lipids),]
-annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+idx <- match(names_lipids, lipids$Name)
+keep <- !is.na(idx)
+lipids <- lipids[idx[keep], ]
+data   <- data[keep, , drop = FALSE]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Class))
 rownames(annotation_row) = lipids$Name
-mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
-names(mycolors) <- unique(annotation_row$lipid_type)
-annotation_colours <- list(
-  lipid_type = list(mycolors)[[1]])
 
-p = make_pheatmap(data = d[d2,], 
+# order data
+row_order <- order(annotation_row$lipid_type)  
+data          <- data[row_order, col_order] 
+data_z          <- data_z[row_order, col_order]
+annotation_row <- annotation_row[row_order, , drop = FALSE]
+
+# expression data
+p = make_pheatmap(data, 
                   cluster_cols = F, 
                   main = paste0("Heatmap 100 most variable lipids\n",title, "\nnot clustered"),
-                  labels_col = colnames(d))
-save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_mostvar_",title,".pdf"))
+                  labels_col = colnames(d),
+                  #color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_imputed_mostvar_",title,".pdf"))
+
+# z-score
+p = make_pheatmap(data_z, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap 100 most variable lipids\n",title, "\nnot clustered"),
+                  labels_col = colnames(d),
+                  color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  #color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_zscore_imputed_mostvar_",title,".pdf"))
 
 ## UMAP (with participant status type)
 d_CSF = t(assay(lipidomics_data_CSF$se_filt_impute))
@@ -1422,97 +1797,188 @@ mean_expression_plot(data = t(assay(lipidomics_data_plasma$se)),
 title = "lipidomics plasma" 
 
 data = assay(lipidomics_data_plasma$se)
+data_z = t(scale(t(data),center = TRUE,scale = TRUE))
+data_z[is.na(data_z)] <- 0
+
 #row annotation
 names_lipids = rownames(data)
 Lipids_final <- read_excel("data input/RE_ metabolomics/Lipids_final.xlsx")
 lipids = Lipids_final %>% 
-  select(Name,Category) %>%
+  select(Name,Class) %>%
   filter(Name %in% names_lipids)
 lipids = lipids[match(lipids$Name,names_lipids),]
-annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+annotation_row = data.frame(lipid_type = as.factor(lipids$Class))
 rownames(annotation_row) = lipids$Name
-mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
+participant_type = tube_batch_plasma
+annotation_col = data.frame(type = as.factor(lipidomics_data_plasma$se$condition))
+rownames(annotation_col) = lipidomics_data_plasma$se$ID
+annotation_col$type <- factor(
+  annotation_col$type,
+  levels = c("ALS","PGMC","CTR","mimic","SYMP", "N.A."))
+colors_type = c("mediumpurple1", "darksalmon", "yellow4","blue4","seagreen4","orange3")
+names(colors_type) = c("ALS","CTR","mimic","N.A.","PGMC","SYMP")
+mycolors = colorRampPalette(brewer.pal(9, "Set1"))(length(unique(annotation_row$lipid_type)))
 names(mycolors) <- unique(annotation_row$lipid_type)
 annotation_colours <- list(
-  lipid_type = list(mycolors)[[1]])
-        
-#without grouping, all lipids
+  lipid_type = mycolors,
+  type = colors_type)
+
+# order data
+row_order <- order(annotation_row$lipid_type)  
+col_order <- order(annotation_col$type)
+data          <- data[row_order, col_order]
+data_z          <- data_z[row_order, col_order]
+annotation_row <- annotation_row[row_order, , drop = FALSE]
+annotation_col <- annotation_col[col_order, , drop = FALSE]
+
+#without grouping, all lipids, expression data
 p = make_pheatmap(data = data, 
                   cluster_cols = F, 
                   main = paste0("Heatmap all lipids\n",title, "\n not clustered"), 
                   show_rownames = F,
-                  labels_col = colnames(data))
+                  labels_col = colnames(data),
+                  #color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  color = viridis::magma(100, direction = -1))
 save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_",title,".pdf"))
+
+#without grouping, all lipids, z-score
+p = make_pheatmap(data = data_z, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap all lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data),
+                  color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  #color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_zscore_raw_",title,".pdf"))
 
 #without grouping, filtered lipids
 data = assay(lipidomics_data_plasma$se_filt_norm)
+data_z = t(scale(t(data),center = TRUE,scale = TRUE))
+data_z[is.na(data_z)] <- 0
 
 #row annotation
 names_lipids = rownames(data)
 lipids = Lipids_final %>% 
-  select(Name,Category) %>%
+  select(Name,Class) %>%
   filter(Name %in% names_lipids)
-lipids = lipids[match(lipids$Name,names_lipids),]
-annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+idx <- match(names_lipids, lipids$Name)
+keep <- !is.na(idx)
+lipids <- lipids[idx[keep], ]
+data   <- data[keep, , drop = FALSE]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Class))
 rownames(annotation_row) = lipids$Name
-mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
-names(mycolors) <- unique(annotation_row$lipid_type)
-annotation_colours <- list(
-  lipid_type = list(mycolors)[[1]])
 
+# order data
+row_order <- order(annotation_row$lipid_type)  
+data          <- data[row_order, col_order]
+data_z          <- data_z[row_order, col_order]
+annotation_row <- annotation_row[row_order, , drop = FALSE]
+
+# expression data
 p = make_pheatmap(data = data, 
                   cluster_cols = F, 
                   main = paste0("Heatmap filtered lipids\n",title, "\n not clustered"), 
                   show_rownames = F,
-                  labels_col = colnames(data))
+                  labels_col = colnames(data),
+                  #color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  color = viridis::magma(100, direction = -1))
 save_pheatmap_pdf(p, filename = paste0("plots/heatmap_filtered_",title,".pdf"))
+
+# z-score
+p = make_pheatmap(data = data_z, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap filtered lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data),
+                  color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  #color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_zscore_filtered_",title,".pdf"))
 
 #without grouping, filtered and imputed
 data = assay(lipidomics_data_plasma$se_filt_impute)
+data_z = t(scale(t(data),center = TRUE,scale = TRUE))
+data_z[is.na(data_z)] <- 0
 
 #row annotation
 names_lipids = rownames(data)
 lipids = Lipids_final %>% 
-  select(Name,Category) %>%
+  select(Name,Class) %>%
   filter(Name %in% names_lipids)
-lipids = lipids[match(lipids$Name,names_lipids),]
-annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+idx <- match(names_lipids, lipids$Name)
+keep <- !is.na(idx)
+lipids <- lipids[idx[keep], ]
+data   <- data[keep, , drop = FALSE]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Class))
 rownames(annotation_row) = lipids$Name
-mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
-names(mycolors) <- unique(annotation_row$lipid_type)
-annotation_colours <- list(
-  lipid_type = list(mycolors)[[1]])
 
+# order data
+row_order <- order(annotation_row$lipid_type)  
+data          <- data[row_order, col_order]
+data_z <- data_z[row_order, col_order]
+annotation_row <- annotation_row[row_order, , drop = FALSE]
+
+# expression data
 p = make_pheatmap(data = data, 
                   cluster_cols = F, 
                   main = paste0("Heatmap imputed lipids\n",title, "\n not clustered"), 
                   show_rownames = F,
-                  labels_col = colnames(data))
+                  labels_col = colnames(data),
+                  #color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  color = viridis::magma(100, direction = -1))
 save_pheatmap_pdf(p, filename = paste0("plots/heatmap_imputed_",title,".pdf"))
 
-# without grouping, 100 most variable lipids
-d = assay(lipidomics_data_plasma$se)
-d2 = head(order(rowVars(d),decreasing = T),100)
+# z-score
+p = make_pheatmap(data = data_z, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap imputed lipids\n",title, "\n not clustered"), 
+                  show_rownames = F,
+                  labels_col = colnames(data),
+                  color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  #color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_zscore_imputed_",title,".pdf"))
 
+# without grouping, 100 most variable lipids
+d = assay(lipidomics_data_plasma$se_filt_impute)
+d2 = head(order(rowVars(d),decreasing = T),100)
 data = d[d2,]
+data_z = t(scale(t(data),center = TRUE,scale = TRUE))
+data_z[is.na(data_z)] <- 0
+
 #row annotation
 names_lipids = rownames(data)
 lipids = Lipids_final %>% 
-  select(Name,Category) %>%
+  select(Name,Class) %>%
   filter(Name %in% names_lipids)
-lipids = lipids[match(lipids$Name,names_lipids),]
-annotation_row = data.frame(lipid_type = as.factor(lipids$Category))
+idx <- match(names_lipids, lipids$Name)
+keep <- !is.na(idx)
+lipids <- lipids[idx[keep], ]
+data   <- data[keep, , drop = FALSE]
+annotation_row = data.frame(lipid_type = as.factor(lipids$Class))
 rownames(annotation_row) = lipids$Name
-mycolors = brewer.pal(length(unique(annotation_row$lipid_type)), "Set1")
-names(mycolors) <- unique(annotation_row$lipid_type)
-annotation_colours <- list(
-  lipid_type = list(mycolors)[[1]])
 
-p = make_pheatmap(data = d[d2,], 
+# order data
+row_order <- order(annotation_row$lipid_type)  
+data          <- data[row_order, col_order]
+data_z <- data_z[row_order, col_order]
+annotation_row <- annotation_row[row_order, , drop = FALSE]
+
+# expression data
+p = make_pheatmap(data, 
                   cluster_cols = F, 
                   main = paste0("Heatmap 100 most variable lipids\n",title, "\nnot clustered"),
-                  labels_col = colnames(d))
-save_pheatmap_pdf(p, filename = paste0("plots/heatmap_raw_mostvar_",title,".pdf"))
+                  labels_col = colnames(d),
+                  #color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_imputed_mostvar_",title,".pdf"))
+
+# z-score
+p = make_pheatmap(data_z, 
+                  cluster_cols = F, 
+                  main = paste0("Heatmap 100 most variable lipids\n",title, "\nnot clustered"),
+                  labels_col = colnames(d),
+                  color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+                  #color = viridis::magma(100, direction = -1))
+save_pheatmap_pdf(p, filename = paste0("plots/heatmap_zscore_imputed_mostvar_",title,".pdf"))
 
 ## UMAP (with participant status type)
 d_plasma = t(assay(lipidomics_data_plasma$se_filt_impute))
@@ -1548,13 +2014,10 @@ UMAP_density_plot(data = d_plasma,
   
   d = do.call("rbind",list(d_1,d_2))
   
-  labels_group = c(rep("CSF", 144), rep("Plasma", 316))
+  labels_group = c(rep("CSF", nrow(d_1)), rep("Plasma", nrow(d_2)))
   title = "plasma_vs_CSF"
-  d <- is.na(d)
-  
-  dim(d)
 
-#perform plots with function
+# UMAP of both biofluids
 UMAP_density_plot(data = d,
                   ggtitle = paste0("UMAP with fluid labels\n", title),
                   legend_name = "Fluid labels",
@@ -1562,9 +2025,473 @@ UMAP_density_plot(data = d,
                   file_location = paste0("plots/UMAP_fluid_group_lipids_",title,".pdf"),
                   file_location_labels=paste0("plots/UMAP_fluid_group_labels_",title,".pdf"),
                   colour_set = group)
+
+# UMAP of both biofluids - batch corrected
+
+batch_CSF = tube_batch_CSF$Batch
+batch_plasma = tube_batch_plasma$Batch
+batch = c(batch_CSF,batch_plasma)
+fluid = labels_group
+design = model.matrix(~fluid)
+
+d_batch_corrected <- limma::removeBatchEffect(t(d), batch = batch, design = design)
+d_batch_corrected <- t(d_batch_corrected)
+
+UMAP_density_plot(data = d_batch_corrected,
+                  ggtitle = paste0("UMAP with fluid labels (batch corrected)\n", title),
+                  legend_name = "Fluid labels",
+                  labels = labels_group,
+                  file_location = paste0("plots/UMAP_fluid_group_lipids_batch_corrected",title,".pdf"),
+                  file_location_labels=paste0("plots/UMAP_fluid_group_labels_batch_corrected",title,".pdf"),
+                  colour_set = group)
 ```
 
-#### Step 8
+#### Step 8: differential expression analyses
 
 The **eighth step** is to *perform differential expression analyses*, with particular interest of eALS vs CTR, PGMC vs CTR. For this, the information between IDs and the status (eALS, CTR, PGMC, mimic) have to be collected from other datasets 
+
+```{r functions-DEx,warning=FALSE,message=FALSE,echo = FALSE}
+# function to run limma for DEX with covariates
+run_DEx <- function(
+  dep,
+  condition_col = "condition",
+  covariates = c("sex","batch","age"),
+  contrasts = NULL,         
+  pairwise = c("vs_ref","all"),
+  ref_level = NULL,          # used when pairwise = "vs_ref"
+  flip_pairwise = FALSE,     # used only when pairwise = "all"
+  robust = TRUE,
+  trend = FALSE,
+  adjust.method = "BH",
+  alpha = NULL,
+  use_adjusted_p = TRUE,
+  lfc_thresh = NULL
+){
+  suppressPackageStartupMessages({
+    library(limma)
+    library(SummarizedExperiment)
+    library(S4Vectors)
+  })
+  pairwise <- match.arg(pairwise)
+
+  if (!inherits(dep, "SummarizedExperiment")) {
+    stop("Expected a SummarizedExperiment-like object.")
+  }
+
+  expr   <- SummarizedExperiment::assay(dep)
+  coldat <- as.data.frame(SummarizedExperiment::colData(dep))
+
+  if (!condition_col %in% names(coldat))
+    stop(sprintf("Column '%s' not found in colData().", condition_col))
+
+  covariates <- covariates[covariates %in% names(coldat)]
+
+  # drop NAs in model 
+  model_cols <- unique(c(condition_col, covariates))
+  keep <- stats::complete.cases(coldat[, model_cols, drop = FALSE])
+  if (!all(keep)) {
+    message(sprintf("Dropping %d samples with missing values in: %s",
+                    sum(!keep), paste(model_cols, collapse=", ")))
+  }
+  coldat <- coldat[keep, , drop = FALSE]
+  expr   <- expr[, keep, drop = FALSE]
+
+  coldat[[condition_col]] <- factor(coldat[[condition_col]])
+  for (cv in covariates) {
+    x <- coldat[[cv]]
+    if (is.character(x) || is.logical(x)) coldat[[cv]] <- factor(x)
+  }
+
+  # remoce spaces in the names 
+  sanitize_levels <- function(x) { if (is.factor(x)) { levels(x) <- make.names(levels(x)) }; x }
+  coldat[[condition_col]] <- sanitize_levels(coldat[[condition_col]])
+  for (cv in covariates) coldat[[cv]] <- sanitize_levels(coldat[[cv]])
+
+  # design
+  rhs <- paste(c(paste0("0 + ", condition_col), covariates), collapse = " + ")
+  design <- stats::model.matrix(as.formula(paste("~", rhs)), data = coldat)
+  colnames(design) <- make.names(colnames(design))  
+
+  # model
+  fit <- limma::lmFit(expr, design)
+
+  cond_levels <- levels(coldat[[condition_col]])
+
+  make_all_pairwise <- function(levels, pref, flip = FALSE) {
+    out <- character()
+    if (length(levels) < 2) return(out)
+    for (i in seq_len(length(levels) - 1)) {
+      for (j in (i + 1):length(levels)) {
+        if (!flip) {
+          nm  <- paste(levels[i], "vs", levels[j], sep = "_")
+          exp <- paste0(pref, levels[i], " - ", pref, levels[j])
+        } else {
+          nm  <- paste(levels[j], "vs", levels[i], sep = "_")
+          exp <- paste0(pref, levels[j], " - ", pref, levels[i])
+        }
+        out[nm] <- exp
+      }
+    }
+    out
+  }
+
+  make_vs_ref <- function(levels, pref, ref) {
+    if (is.null(ref)) stop("Provide 'ref_level' when pairwise='vs_ref'.")
+    if (!(ref %in% levels)) stop(sprintf("ref_level '%s' not found in levels(%s).", ref, condition_col))
+    others <- setdiff(levels, ref)
+    setNames(
+      object = paste0(pref, others, " - ", pref, ref),
+      nm     = paste0(others, "_vs_", ref)
+    )
+  }
+
+  if (is.null(contrasts)) {
+    if (pairwise == "vs_ref") {
+      contrasts <- make_vs_ref(cond_levels, paste0(condition_col), ref_level)
+    } else {
+      contrasts <- make_all_pairwise(cond_levels, paste0(condition_col), flip = flip_pairwise)
+    }
+  }
+
+  coefs_in_design <- colnames(design)
+  normalize_terms <- function(cterm) {
+    toks <- unlist(strsplit(cterm, "([\\+\\-])", perl=TRUE))
+    toks <- trimws(toks)
+    ops  <- gsub("[^\\+\\-]", "", unlist(strsplit(cterm, "[^\\+\\-]+", perl=TRUE)))
+    ops  <- ops[ops != ""]
+    repl <- function(tok){
+      if (tok %in% coefs_in_design) return(tok)
+      cand <- make.names(paste0(condition_col, tok))
+      if (cand %in% coefs_in_design) return(cand)
+      stop(sprintf("Contrast term '%s' not found in design columns.", tok))
+    }
+    toks2 <- vapply(toks, repl, character(1))
+    out <- toks2[1]
+    if (length(ops)) for (k in seq_along(ops)) out <- paste0(out, ops[k], toks2[k+1])
+    out
+  }
+  contrasts_norm <- vapply(contrasts, normalize_terms, character(1))
+  Cmat <- limma::makeContrasts(contrasts = contrasts_norm, levels = design)
+
+  fit2 <- limma::contrasts.fit(fit, Cmat)
+  fit2 <- limma::eBayes(fit2, robust = robust, trend = trend)
+
+  fmeta <- as.data.frame(SummarizedExperiment::rowData(dep))
+  fmeta$feature_id <- rownames(expr)
+  tables <- setNames(vector("list", ncol(Cmat)), colnames(Cmat))
+
+  for (cf in colnames(Cmat)) {
+    tt <- limma::topTable(fit2, coef = cf, number = Inf, sort.by = "P", adjust.method = adjust.method)
+    tt$feature_id <- rownames(tt)
+
+    if (!is.null(alpha) || !is.null(lfc_thresh)) {
+      pcol <- if (use_adjusted_p) "adj.P.Val" else "P.Value"
+      sigp <- if (!is.null(alpha)) tt[[pcol]] < alpha else TRUE
+      sigf <- if (!is.null(lfc_thresh)) abs(tt$logFC) >= lfc_thresh else TRUE
+      tt$significant <- sigp & sigf
+    }
+
+    if (nrow(fmeta)) {
+      tt <- merge(fmeta, tt, by = "feature_id", all.y = TRUE)
+      rownames(tt) <- tt$feature_id
+    }
+    tables[[cf]] <- tt
+  }
+
+  combined <- do.call(rbind, Map(function(d, n){d$contrast <- n; d}, tables, names(tables)))
+  rownames(combined) <- NULL
+
+  list(design = design, contrast_matrix = Cmat, fit = fit2, tables = tables, combined = combined)
+}
+
+# volcano plot
+volcano_plot_contrast <- function(
+  df,
+  log2fc_col,
+  padj_col,
+  group_pos,
+  group_neg,
+  title = NULL,
+  de_col   = "DE",
+  label_col = "Target",
+  alpha = NULL,
+  colors = NULL,
+  add_x = 0,
+  add_y = 0
+){
+  # create DE column if not present: group_pos for logFC>0, group_neg for logFC<0, 'ns' for NA/0
+  if (!de_col %in% names(df)) {
+    df <- df %>%
+      mutate(
+        !!de_col := case_when(
+          .data[[log2fc_col]] >  0 &  .data[[padj_col]] < alpha ~ group_pos,
+          .data[[log2fc_col]] <  0 & .data[[padj_col]] < alpha ~ group_neg,
+          TRUE                      ~ "ns"
+        )
+      )
+  }
+
+  # compute -log10(padj) 
+  df <- df %>% mutate(`.minus_log10_padj` = -log10(.data[[padj_col]]))
+
+  if (is.null(colors)) {
+    colors <- c(
+      setNames("#3da0c2", group_pos),   # pos side
+      ns = "lightgrey",
+      setNames("#C25F3D", group_neg)    # neg side
+    )
+  }
+
+  p <- ggplot(df, aes(x = .data[[log2fc_col]], y = .minus_log10_padj)) +
+    geom_point(aes(color = .data[[de_col]], size = .minus_log10_padj), alpha = 0.8) +
+    geom_text_repel(
+      data = df %>% filter(.data[[de_col]] != "ns"),
+      aes(label = .data[[label_col]]),
+      max.overlaps = 20,
+      box.padding = 0.4,
+      size = 5
+    ) +
+    geom_vline(xintercept = 0, linetype = "dashed", col = "darkgrey")
+
+  if (!is.null(alpha)) {
+    p <- p +
+      geom_hline(yintercept = -log10(alpha), linetype = "dashed", col = "darkgrey") +
+      annotate("text", x = add_x, y = (-log10(alpha)) + add_y,
+               label = paste0("FDR = ", alpha*100," %"), size = 5, col = "darkgrey")
+  }
+
+  p +
+    scale_color_manual(values = colors) +
+    scale_size_continuous(range = c(2, 7)) +
+    theme_minimal() +
+    ylab(expression(-log[10]("adjusted p-value"))) +
+    xlab(expression(log[2]("fold-change"))) +
+    ggtitle(title) +
+    labs(size = expression(-log[10]("adjusted p-value"))) +
+    theme(
+      axis.title.x = element_blank(),
+      text = element_text(size = 15),
+      axis.title = element_text(size = 18),
+      axis.text = element_text(size = 16),
+      plot.title = element_text(size = 18, hjust = 0.5, face = "bold"),
+      legend.title = element_text(size = 16),
+      legend.text = element_text(size = 15)
+    )
+}
+
+# make new Design Experiments column data with info of sex and age
+# - CSF
+coldata_CSF = as.data.frame(colData(lipidomics_data_CSF$se_filt_impute))
+coldata_CSF_new = coldata_CSF %>% 
+  mutate(PatientID = tube_batch_CSF$PatientID) %>%
+  mutate(PatientID = ifelse(is.na(PatientID),"6H1HR8R7",PatientID)) %>%
+  left_join(date_all %>% dplyr::select(Pseudonyme,age) %>% dplyr::rename(PatientID = Pseudonyme)) %>%
+  left_join(Sex_all %>% dplyr::select(Pseudonyme,sex) %>% dplyr::rename(PatientID = Pseudonyme)) 
+colData(lipidomics_data_CSF$se_filt_impute) = S4Vectors::DataFrame(coldata_CSF_new)
+
+res_CSF = run_DEx(
+    lipidomics_data_CSF$se_filt_impute,
+    covariates = c("sex","batch","age"),
+    contrasts = c("PGMC_vs_CTR" = "PGMC-CTR",
+                  "ALS_vs_CTR"="ALS-CTR",
+                  "mimic_vs_CTR" = "mimic-CTR",
+                  "ALS_vs_PGMC" = "ALS-PGMC",
+                  "ALS_vs_mimic" = "ALS-mimic",
+                  "mimic_vs_PGMC" = "mimic-PGMC"))
+
+res_CSF_ALS_CTR = res_CSF$tables$`conditionALS-conditionCTR` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
+  dplyr::rename(logFC_ALS_CTR = logFC,
+         P.Value_ALS_CTR = P.Value,
+         adj.P.Val_ALS_CTR = adj.P.Val)
+res_CSF_PGMC_CTR = res_CSF$tables$`conditionPGMC-conditionCTR` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
+  dplyr::rename(logFC_PGMC_CTR = logFC,
+         P.Value_PGMC_CTR = P.Value,
+         adj.P.Val_PGMC_CTR = adj.P.Val)
+res_CSF_mimic_CTR = res_CSF$tables$`conditionmimic-conditionCTR` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val)  %>%
+  dplyr::rename(logFC_mimic_CTR = logFC,
+         P.Value_mimic_CTR = P.Value,
+         adj.P.Val_mimic_CTR = adj.P.Val)
+res_CSF_ALS_PGMC = res_CSF$tables$`conditionALS-conditionPGMC` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val)  %>%
+  dplyr::rename(logFC_ALS_PGMC = logFC,
+         P.Value_ALS_PGMC = P.Value,
+         adj.P.Val_ALS_PGMC = adj.P.Val)
+res_CSF_ALS_mimic = res_CSF$tables$`conditionALS-conditionmimic` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
+  dplyr::rename(logFC_ALS_mimic = logFC,
+         P.Value_ALS_mimic = P.Value,
+         adj.P.Val_ALS_mimic = adj.P.Val)
+res_CSF_mimic_PGMC = res_CSF$tables$`conditionmimic-conditionPGMC` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
+  dplyr::rename(logFC_mimic_PGMC = logFC,
+         P.Value_mimic_PGMC = P.Value,
+         adj.P.Val_mimic_PGMC = adj.P.Val)
+
+res_CSF_all = Reduce(function(x, y) merge(x, y, by = "name", all = TRUE),
+                      list(res_CSF_ALS_CTR,
+                        res_CSF_PGMC_CTR,
+                        res_CSF_mimic_CTR,
+                        res_CSF_ALS_PGMC,
+                        res_CSF_ALS_mimic,
+                        res_CSF_mimic_PGMC))
+writexl::write_xlsx(res_CSF_all,"results/DE_CSF.xlsx")
+
+# - Plasma
+coldata_plasma = as.data.frame(colData(lipidomics_data_plasma$se_filt_impute))
+coldata_plasma_new = coldata_plasma %>% 
+  mutate(PatientID = tube_batch_plasma$PatientID) %>%
+  mutate(PatientID = ifelse(is.na(PatientID),"6H1HR8R7",PatientID)) %>%
+  left_join(date_all %>% dplyr::select(Pseudonyme,age) %>% dplyr::rename(PatientID = Pseudonyme)) %>%
+  left_join(Sex_all %>% dplyr::select(Pseudonyme,sex) %>% dplyr::rename(PatientID = Pseudonyme)) 
+colData(lipidomics_data_plasma$se_filt_impute) = S4Vectors::DataFrame(coldata_plasma_new)
+
+res_plasma = run_DEx(
+    lipidomics_data_plasma$se_filt_impute,
+    covariates = c("sex","batch","age"),
+    contrasts = c("PGMC_vs_CTR" = "PGMC-CTR",
+                  "ALS_vs_CTR"="ALS-CTR",
+                  "mimic_vs_CTR" = "mimic-CTR",
+                  "ALS_vs_PGMC" = "ALS-PGMC",
+                  "ALS_vs_mimic" = "ALS-mimic",
+                  "mimic_vs_PGMC" = "mimic-PGMC"))
+
+res_plasma_ALS_CTR = res_plasma$tables$`conditionALS-conditionCTR` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
+  dplyr::rename(logFC_ALS_CTR = logFC,
+         P.Value_ALS_CTR = P.Value,
+         adj.P.Val_ALS_CTR = adj.P.Val)
+res_plasma_PGMC_CTR = res_plasma$tables$`conditionPGMC-conditionCTR` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
+  dplyr::rename(logFC_PGMC_CTR = logFC,
+         P.Value_PGMC_CTR = P.Value,
+         adj.P.Val_PGMC_CTR = adj.P.Val)
+res_plasma_mimic_CTR = res_plasma$tables$`conditionmimic-conditionCTR` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val)  %>%
+  dplyr::rename(logFC_mimic_CTR = logFC,
+         P.Value_mimic_CTR = P.Value,
+         adj.P.Val_mimic_CTR = adj.P.Val)
+res_plasma_ALS_PGMC = res_plasma$tables$`conditionALS-conditionPGMC` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val)  %>%
+  dplyr::rename(logFC_ALS_PGMC = logFC,
+         P.Value_ALS_PGMC = P.Value,
+         adj.P.Val_ALS_PGMC = adj.P.Val)
+res_plasma_ALS_mimic = res_plasma$tables$`conditionALS-conditionmimic` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
+  dplyr::rename(logFC_ALS_mimic = logFC,
+         P.Value_ALS_mimic = P.Value,
+         adj.P.Val_ALS_mimic = adj.P.Val)
+res_plasma_mimic_PGMC = res_plasma$tables$`conditionmimic-conditionPGMC` %>% 
+  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
+  dplyr::rename(logFC_mimic_PGMC = logFC,
+         P.Value_mimic_PGMC = P.Value,
+         adj.P.Val_mimic_PGMC = adj.P.Val)
+
+res_plasma_all = Reduce(function(x, y) merge(x, y, by = "name", all = TRUE),
+                      list(res_plasma_ALS_CTR,
+                        res_plasma_PGMC_CTR,
+                        res_plasma_mimic_CTR,
+                        res_plasma_ALS_PGMC,
+                        res_plasma_ALS_mimic,
+                        res_plasma_mimic_PGMC))
+writexl::write_xlsx(res_plasma_all,"results/DE_plasma.xlsx")
+
+```
+
+- CSF
+```{r functions-DEx-CSF,warning=FALSE,message=FALSE}
+# ALS vs CTR
+p = volcano_plot_contrast(res_CSF_ALS_CTR,
+                      log2fc_col = "logFC_ALS_CTR",
+                      padj_col   = "adj.P.Val_ALS_CTR",
+                      group_pos  = "ALS",
+                      group_neg  = "CTR",
+                      title      = "ALS vs CTR (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.75, add_y = 0.05)
+p
+pdf("plots/DE_CSF_ALS_CTR_FDR10.pdf",width = 12,height = 8)
+p
+dev.off()
+
+
+# PGMC vs CTR
+p = volcano_plot_contrast(res_CSF_PGMC_CTR,
+                      log2fc_col = "logFC_PGMC_CTR",
+                      padj_col   = "adj.P.Val_PGMC_CTR",
+                      group_pos  = "PGMC",
+                      group_neg  = "CTR",
+                      title      = "PGMC vs CTR (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.7, add_y = 0.05)
+p
+pdf("plots/DE_CSF_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+p
+dev.off()
+```
+
+- Plasma
+```{r functions-DEx-plasma,warning=FALSE,message=FALSE}
+# ALS vs CTR
+p = volcano_plot_contrast(res_plasma_ALS_CTR,
+                      log2fc_col = "logFC_ALS_CTR",
+                      padj_col   = "adj.P.Val_ALS_CTR",
+                      group_pos  = "ALS",
+                      group_neg  = "CTR",
+                      title      = "ALS vs CTR (FDR = 5%)",
+                      label_col = "name",
+                      alpha      = 0.05,      
+                      add_x      = 0.4, add_y = 0.1)
+p
+pdf("plots/DE_plasma_ALS_CTR_FDR5.pdf",width = 12,height = 8)
+p
+dev.off()
+p = volcano_plot_contrast(res_plasma_ALS_CTR,
+                      log2fc_col = "logFC_ALS_CTR",
+                      padj_col   = "adj.P.Val_ALS_CTR",
+                      group_pos  = "ALS",
+                      group_neg  = "CTR",
+                      title      = "ALS vs CTR (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.5, add_y = 0.1)
+p
+pdf("plots/DE_plasma_ALS_CTR_FDR10.pdf",width = 12,height = 8)
+p
+dev.off()
+
+
+# PGMC vs CTR
+p = volcano_plot_contrast(res_plasma_PGMC_CTR,
+                      log2fc_col = "logFC_PGMC_CTR",
+                      padj_col   = "adj.P.Val_PGMC_CTR",
+                      group_pos  = "PGMC",
+                      group_neg  = "CTR",
+                      title      = "PGMC vs CTR (FDR = 5%)",
+                      label_col = "name",
+                      alpha      = 0.05,      
+                      add_x      = 0.8, add_y = 0.1)
+p
+pdf("plots/DE_plasma_PGMC_CTR_FDR5.pdf",width = 12,height = 8)
+p
+dev.off()
+p = volcano_plot_contrast(res_plasma_PGMC_CTR,
+                      log2fc_col = "logFC_PGMC_CTR",
+                      padj_col   = "adj.P.Val_PGMC_CTR",
+                      group_pos  = "PGMC",
+                      group_neg  = "CTR",
+                      title      = "PGMC vs CTR (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.7, add_y = 0.1)
+p
+pdf("plots/DE_plasma_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+p
+dev.off()
+
+```
 
