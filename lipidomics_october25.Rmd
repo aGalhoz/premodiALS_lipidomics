@@ -2204,6 +2204,52 @@ run_DEx <- function(
   list(design = design, contrast_matrix = Cmat, fit = fit2, tables = tables, combined = combined)
 }
 
+# DEx per visit
+run_DEx_visit <- function(se, visit_value, ...) {
+  keep <- !is.na(colData(se)$Visit) & colData(se)$Visit == visit_value
+  se_sub <- se[, keep, drop = FALSE]
+
+  run_DEx(
+    se_sub,
+    covariates = c("sex","batch","age"),
+    contrasts = c(
+      "PGMC_vs_CTR"   = "PGMC-CTR",
+      "ALS_vs_CTR"    = "ALS-CTR",
+      "mimic_vs_CTR"  = "mimic-CTR",
+      "ALS_vs_PGMC"   = "ALS-PGMC",
+      "ALS_vs_mimic"  = "ALS-mimic",
+      "mimic_vs_PGMC" = "mimic-PGMC"
+    )
+  )
+}
+
+# summarise DEx results
+summarise_DE <- function(res, key = "name") {
+  contrast_map <- c(
+    ALS_CTR   = "conditionALS-conditionCTR",
+    PGMC_CTR  = "conditionPGMC-conditionCTR",
+    mimic_CTR = "conditionmimic-conditionCTR",
+    ALS_PGMC  = "conditionALS-conditionPGMC",
+    ALS_mimic = "conditionALS-conditionmimic",
+    mimic_PGMC= "conditionmimic-conditionPGMC"
+  )
+  
+  dfs <- lapply(names(contrast_map), function(short) {
+    tab_name <- contrast_map[[short]]
+    tab <- res$tables[[tab_name]]
+    
+    tab %>%
+      dplyr::select(all_of(c(key, "logFC", "P.Value", "adj.P.Val"))) %>%
+      dplyr::rename(
+        !!paste0("logFC_", short)      := logFC,
+        !!paste0("P.Value_", short)    := P.Value,
+        !!paste0("adj.P.Val_", short)  := adj.P.Val
+      )
+  })
+  
+  Reduce(function(x, y) merge(x, y, by = key, all = TRUE), dfs)
+}
+
 # volcano plot
 volcano_plot_contrast <- function(
   df,
@@ -2219,7 +2265,7 @@ volcano_plot_contrast <- function(
   add_x = 0,
   add_y = 0
 ){
-  # create DE column if not present: group_pos for logFC>0, group_neg for logFC<0, 'ns' for NA/0
+  # create DE column 
   if (!de_col %in% names(df)) {
     df <- df %>%
       mutate(
@@ -2231,7 +2277,7 @@ volcano_plot_contrast <- function(
       )
   }
 
-  # compute -log10(padj) 
+  # -log10(padj) 
   df <- df %>% mutate(`.minus_log10_padj` = -log10(.data[[padj_col]]))
 
   if (is.null(colors)) {
@@ -2283,153 +2329,106 @@ volcano_plot_contrast <- function(
 # - CSF
 coldata_CSF = as.data.frame(colData(lipidomics_data_CSF$se_filt_impute))
 coldata_CSF_new = coldata_CSF %>% 
-  mutate(PatientID = tube_batch_CSF$PatientID) %>%
+  mutate(PatientID = tube_batch_CSF$PatientID,
+         Visit = tube_batch_CSF$Visit) %>%
   mutate(PatientID = ifelse(is.na(PatientID),"6H1HR8R7",PatientID)) %>%
   left_join(date_all %>% dplyr::select(Pseudonyme,age) %>% dplyr::rename(PatientID = Pseudonyme)) %>%
   left_join(Sex_all %>% dplyr::select(Pseudonyme,sex) %>% dplyr::rename(PatientID = Pseudonyme)) 
 colData(lipidomics_data_CSF$se_filt_impute) = S4Vectors::DataFrame(coldata_CSF_new)
 
-res_CSF = run_DEx(
-    lipidomics_data_CSF$se_filt_impute,
-    covariates = c("sex","batch","age"),
-    contrasts = c("PGMC_vs_CTR" = "PGMC-CTR",
-                  "ALS_vs_CTR"="ALS-CTR",
-                  "mimic_vs_CTR" = "mimic-CTR",
-                  "ALS_vs_PGMC" = "ALS-PGMC",
-                  "ALS_vs_mimic" = "ALS-mimic",
-                  "mimic_vs_PGMC" = "mimic-PGMC"))
+# run for each visit
+res_CSF_V0 <- run_DEx_visit(lipidomics_data_CSF$se_filt_impute, "V0")
+res_CSF_V1 <- run_DEx_visit(lipidomics_data_CSF$se_filt_impute, "V1")
 
-res_CSF_ALS_CTR = res_CSF$tables$`conditionALS-conditionCTR` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
-  dplyr::rename(logFC_ALS_CTR = logFC,
-         P.Value_ALS_CTR = P.Value,
-         adj.P.Val_ALS_CTR = adj.P.Val)
-res_CSF_PGMC_CTR = res_CSF$tables$`conditionPGMC-conditionCTR` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
-  dplyr::rename(logFC_PGMC_CTR = logFC,
-         P.Value_PGMC_CTR = P.Value,
-         adj.P.Val_PGMC_CTR = adj.P.Val)
-res_CSF_mimic_CTR = res_CSF$tables$`conditionmimic-conditionCTR` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val)  %>%
-  dplyr::rename(logFC_mimic_CTR = logFC,
-         P.Value_mimic_CTR = P.Value,
-         adj.P.Val_mimic_CTR = adj.P.Val)
-res_CSF_ALS_PGMC = res_CSF$tables$`conditionALS-conditionPGMC` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val)  %>%
-  dplyr::rename(logFC_ALS_PGMC = logFC,
-         P.Value_ALS_PGMC = P.Value,
-         adj.P.Val_ALS_PGMC = adj.P.Val)
-res_CSF_ALS_mimic = res_CSF$tables$`conditionALS-conditionmimic` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
-  dplyr::rename(logFC_ALS_mimic = logFC,
-         P.Value_ALS_mimic = P.Value,
-         adj.P.Val_ALS_mimic = adj.P.Val)
-res_CSF_mimic_PGMC = res_CSF$tables$`conditionmimic-conditionPGMC` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
-  dplyr::rename(logFC_mimic_PGMC = logFC,
-         P.Value_mimic_PGMC = P.Value,
-         adj.P.Val_mimic_PGMC = adj.P.Val)
+# summarise for each visit
+res_CSF_V0_all <- summarise_DE(res_CSF_V0, key = "name")
+res_CSF_V1_all <- summarise_DE(res_CSF_V1, key = "name")
 
-res_CSF_all = Reduce(function(x, y) merge(x, y, by = "name", all = TRUE),
-                      list(res_CSF_ALS_CTR,
-                        res_CSF_PGMC_CTR,
-                        res_CSF_mimic_CTR,
-                        res_CSF_ALS_PGMC,
-                        res_CSF_ALS_mimic,
-                        res_CSF_mimic_PGMC))
-writexl::write_xlsx(res_CSF_all,"results/DE_CSF.xlsx")
+writexl::write_xlsx(list(DE_CSF_V0 = res_CSF_V0_all, DE_CSF_V1 = res_CSF_V1_all),
+                    "results/DE_CSF_by_visit.xlsx")
 
 # - Plasma
 coldata_plasma = as.data.frame(colData(lipidomics_data_plasma$se_filt_impute))
 coldata_plasma_new = coldata_plasma %>% 
-  mutate(PatientID = tube_batch_plasma$PatientID) %>%
+  mutate(PatientID = tube_batch_plasma$PatientID,
+         Visit = tube_batch_plasma$Visit) %>%
   mutate(PatientID = ifelse(is.na(PatientID),"6H1HR8R7",PatientID)) %>%
   left_join(date_all %>% dplyr::select(Pseudonyme,age) %>% dplyr::rename(PatientID = Pseudonyme)) %>%
   left_join(Sex_all %>% dplyr::select(Pseudonyme,sex) %>% dplyr::rename(PatientID = Pseudonyme)) 
 colData(lipidomics_data_plasma$se_filt_impute) = S4Vectors::DataFrame(coldata_plasma_new)
 
-res_plasma = run_DEx(
-    lipidomics_data_plasma$se_filt_impute,
-    covariates = c("sex","batch","age"),
-    contrasts = c("PGMC_vs_CTR" = "PGMC-CTR",
-                  "ALS_vs_CTR"="ALS-CTR",
-                  "mimic_vs_CTR" = "mimic-CTR",
-                  "ALS_vs_PGMC" = "ALS-PGMC",
-                  "ALS_vs_mimic" = "ALS-mimic",
-                  "mimic_vs_PGMC" = "mimic-PGMC"))
+# run for each visit
+res_plasma_V0 <- run_DEx_visit(lipidomics_data_plasma$se_filt_impute, "V0")
+res_plasma_V1 <- run_DEx_visit(lipidomics_data_plasma$se_filt_impute, "V1")
 
-res_plasma_ALS_CTR = res_plasma$tables$`conditionALS-conditionCTR` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
-  dplyr::rename(logFC_ALS_CTR = logFC,
-         P.Value_ALS_CTR = P.Value,
-         adj.P.Val_ALS_CTR = adj.P.Val)
-res_plasma_PGMC_CTR = res_plasma$tables$`conditionPGMC-conditionCTR` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
-  dplyr::rename(logFC_PGMC_CTR = logFC,
-         P.Value_PGMC_CTR = P.Value,
-         adj.P.Val_PGMC_CTR = adj.P.Val)
-res_plasma_mimic_CTR = res_plasma$tables$`conditionmimic-conditionCTR` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val)  %>%
-  dplyr::rename(logFC_mimic_CTR = logFC,
-         P.Value_mimic_CTR = P.Value,
-         adj.P.Val_mimic_CTR = adj.P.Val)
-res_plasma_ALS_PGMC = res_plasma$tables$`conditionALS-conditionPGMC` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val)  %>%
-  dplyr::rename(logFC_ALS_PGMC = logFC,
-         P.Value_ALS_PGMC = P.Value,
-         adj.P.Val_ALS_PGMC = adj.P.Val)
-res_plasma_ALS_mimic = res_plasma$tables$`conditionALS-conditionmimic` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
-  dplyr::rename(logFC_ALS_mimic = logFC,
-         P.Value_ALS_mimic = P.Value,
-         adj.P.Val_ALS_mimic = adj.P.Val)
-res_plasma_mimic_PGMC = res_plasma$tables$`conditionmimic-conditionPGMC` %>% 
-  dplyr::select(name,logFC,P.Value,adj.P.Val) %>%
-  dplyr::rename(logFC_mimic_PGMC = logFC,
-         P.Value_mimic_PGMC = P.Value,
-         adj.P.Val_mimic_PGMC = adj.P.Val)
+# summarise for each visit
+res_plasma_V0_all <- summarise_DE(res_plasma_V0, key = "name")
+res_plasma_V1_all <- summarise_DE(res_plasma_V1, key = "name")
 
-res_plasma_all = Reduce(function(x, y) merge(x, y, by = "name", all = TRUE),
-                      list(res_plasma_ALS_CTR,
-                        res_plasma_PGMC_CTR,
-                        res_plasma_mimic_CTR,
-                        res_plasma_ALS_PGMC,
-                        res_plasma_ALS_mimic,
-                        res_plasma_mimic_PGMC))
-writexl::write_xlsx(res_plasma_all,"results/DE_plasma.xlsx")
+writexl::write_xlsx(list(DE_plasma_V0 = res_plasma_V0_all, DE_plasma_V1 = res_plasma_V1_all),
+                    "results/DE_plasma_by_visit.xlsx")
+
 
 ```
 
 - CSF
 ```{r functions-DEx-CSF,warning=FALSE,message=FALSE}
 # ALS vs CTR
-p = volcano_plot_contrast(res_CSF_ALS_CTR,
+p = volcano_plot_contrast(res_CSF_V0_all,
                       log2fc_col = "logFC_ALS_CTR",
                       padj_col   = "adj.P.Val_ALS_CTR",
                       group_pos  = "ALS",
                       group_neg  = "CTR",
-                      title      = "ALS vs CTR (FDR = 10%)",
+                      title      = "ALS vs CTR at V0 (FDR = 10%)",
                       label_col = "name",
                       alpha      = 0.1,      
-                      add_x      = 0.75, add_y = 0.05)
+                      add_x      = 0.65, add_y = 0.05)
 p
-pdf("plots/DE_CSF_ALS_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_CSF_V0_ALS_CTR_FDR10.pdf",width = 12,height = 8)
+p
+dev.off()
+
+p = volcano_plot_contrast(res_CSF_V1_all,
+                      log2fc_col = "logFC_ALS_CTR",
+                      padj_col   = "adj.P.Val_ALS_CTR",
+                      group_pos  = "ALS",
+                      group_neg  = "CTR",
+                      title      = "ALS vs CTR at V1 (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 1.2, add_y = 0.05)
+p
+pdf("plots/DE_CSF_V1_ALS_CTR_FDR10.pdf",width = 12,height = 8)
 p
 dev.off()
 
 
 # PGMC vs CTR
-p = volcano_plot_contrast(res_CSF_PGMC_CTR,
+p = volcano_plot_contrast(res_CSF_V0_all,
                       log2fc_col = "logFC_PGMC_CTR",
                       padj_col   = "adj.P.Val_PGMC_CTR",
                       group_pos  = "PGMC",
                       group_neg  = "CTR",
-                      title      = "PGMC vs CTR (FDR = 10%)",
+                      title      = "PGMC vs CTR at V0 (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.9, add_y = 0.05)
+p
+pdf("plots/DE_CSF_V0_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+p
+dev.off()
+
+p = volcano_plot_contrast(res_CSF_V1_all,
+                      log2fc_col = "logFC_PGMC_CTR",
+                      padj_col   = "adj.P.Val_PGMC_CTR",
+                      group_pos  = "PGMC",
+                      group_neg  = "CTR",
+                      title      = "PGMC vs CTR at V1 (FDR = 10%)",
                       label_col = "name",
                       alpha      = 0.1,      
                       add_x      = 0.7, add_y = 0.05)
 p
-pdf("plots/DE_CSF_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_CSF_V1_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
 p
 dev.off()
 ```
@@ -2437,59 +2436,88 @@ dev.off()
 - Plasma
 ```{r functions-DEx-plasma,warning=FALSE,message=FALSE}
 # ALS vs CTR
-p = volcano_plot_contrast(res_plasma_ALS_CTR,
+p = volcano_plot_contrast(res_plasma_V0_all,
                       log2fc_col = "logFC_ALS_CTR",
                       padj_col   = "adj.P.Val_ALS_CTR",
                       group_pos  = "ALS",
                       group_neg  = "CTR",
-                      title      = "ALS vs CTR (FDR = 5%)",
-                      label_col = "name",
-                      alpha      = 0.05,      
-                      add_x      = 0.4, add_y = 0.1)
-p
-pdf("plots/DE_plasma_ALS_CTR_FDR5.pdf",width = 12,height = 8)
-p
-dev.off()
-p = volcano_plot_contrast(res_plasma_ALS_CTR,
-                      log2fc_col = "logFC_ALS_CTR",
-                      padj_col   = "adj.P.Val_ALS_CTR",
-                      group_pos  = "ALS",
-                      group_neg  = "CTR",
-                      title      = "ALS vs CTR (FDR = 10%)",
+                      title      = "ALS vs CTR at V0 (FDR = 10%)",
                       label_col = "name",
                       alpha      = 0.1,      
                       add_x      = 0.5, add_y = 0.1)
 p
-pdf("plots/DE_plasma_ALS_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V0_ALS_CTR_FDR10.pdf",width = 12,height = 8)
+p
+dev.off()
+
+p = volcano_plot_contrast(res_plasma_V1_all,
+                      log2fc_col = "logFC_ALS_CTR",
+                      padj_col   = "adj.P.Val_ALS_CTR",
+                      group_pos  = "ALS",
+                      group_neg  = "CTR",
+                      title      = "ALS vs CTR at V1 (FDR = 5%)",
+                      label_col = "name",
+                      alpha      = 0.05,      
+                      add_x      = 0.7, add_y = 0.1)
+p
+pdf("plots/DE_plasma_V1_ALS_CTR_FDR5.pdf",width = 12,height = 8)
+p
+dev.off()
+
+p = volcano_plot_contrast(res_plasma_V1_all,
+                      log2fc_col = "logFC_ALS_CTR",
+                      padj_col   = "adj.P.Val_ALS_CTR",
+                      group_pos  = "ALS",
+                      group_neg  = "CTR",
+                      title      = "ALS vs CTR at V1 (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.7, add_y = 0.1)
+p
+pdf("plots/DE_plasma_V1_ALS_CTR_FDR10.pdf",width = 12,height = 8)
 p
 dev.off()
 
 
 # PGMC vs CTR
-p = volcano_plot_contrast(res_plasma_PGMC_CTR,
+p = volcano_plot_contrast(res_plasma_V0_all,
                       log2fc_col = "logFC_PGMC_CTR",
                       padj_col   = "adj.P.Val_PGMC_CTR",
                       group_pos  = "PGMC",
                       group_neg  = "CTR",
-                      title      = "PGMC vs CTR (FDR = 5%)",
+                      title      = "PGMC vs CTR at V0 (FDR = 5%)",
                       label_col = "name",
                       alpha      = 0.05,      
-                      add_x      = 0.8, add_y = 0.1)
+                      add_x      = 0.7, add_y = 0.1)
 p
-pdf("plots/DE_plasma_PGMC_CTR_FDR5.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V0_PGMC_CTR_FDR5.pdf",width = 12,height = 8)
 p
 dev.off()
-p = volcano_plot_contrast(res_plasma_PGMC_CTR,
+p = volcano_plot_contrast(res_plasma_V0_all,
                       log2fc_col = "logFC_PGMC_CTR",
                       padj_col   = "adj.P.Val_PGMC_CTR",
                       group_pos  = "PGMC",
                       group_neg  = "CTR",
-                      title      = "PGMC vs CTR (FDR = 10%)",
+                      title      = "PGMC vs CTR at V0 (FDR = 10%)",
                       label_col = "name",
                       alpha      = 0.1,      
                       add_x      = 0.7, add_y = 0.1)
 p
-pdf("plots/DE_plasma_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V0_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+p
+dev.off()
+
+p = volcano_plot_contrast(res_plasma_V1_all,
+                      log2fc_col = "logFC_PGMC_CTR",
+                      padj_col   = "adj.P.Val_PGMC_CTR",
+                      group_pos  = "PGMC",
+                      group_neg  = "CTR",
+                      title      = "PGMC vs CTR at V1 (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.9, add_y = -0.1)
+p
+pdf("plots/DE_plasma_V1_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
 p
 dev.off()
 
