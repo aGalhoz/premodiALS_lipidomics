@@ -699,7 +699,7 @@ The **fourth step** is to *give an overview* of how many samples of *eALS*, *PGM
 
 ```{r overview-IDs, message=F,warning=FALSE,echo=FALSE}
 # General documentation info
-GeneralDocumentation <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/GeneralDocumentation.csv", 
+GeneralDocumentation <- read_delim("data input/export-2026-05-11-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK_271participants/GeneralDocumentation.csv", 
            delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
 # IDS of patients
@@ -777,28 +777,14 @@ all_participants_IDs = do.call("rbind",
 writexl::write_xlsx(all_participants_IDs,"results/all_participants_IDs.xlsx")
 
 # Get info of sex and age for all participants
-participants_PGMC = read_excel("data input/recruited participants.xlsx", 
-                               sheet = "Total PGMC") %>%
-  select(Pseudonyme,sex,age) 
-participants_CTR = read_excel("data input/recruited participants.xlsx", 
-                              sheet = "Total Control") %>%
-  dplyr::select(Pseudonyme,Sex,`Age...7`) %>%
-  dplyr::rename(sex = Sex,
-         age = `Age...7`)
-participants_ALS_mimic = read_excel("data input/recruited participants.xlsx", 
-                                    sheet = "Total EALS-Mimics") %>%
-  dplyr::select(Pseudonyme,Sex,`Age...7`) %>%
-  dplyr::rename(sex = Sex,
-         age = `Age...7`)
-Sex_age_all_participants = do.call("rbind",list(participants_PGMC,
-                                                participants_CTR,
-                                                participants_ALS_mimic))
+Sex_age_all_participants = read_excel("data input/all_participants_ID_visits.xlsx") %>%
+  select(PatientID, ParticipantCode, sex, age, Visit, type)
 ```
 
 #### - CSF (the patient IDs given by Laura) - not displaying, but it is in code
 ```{r overview-IDs-CSF-Laura, message=F,warning=FALSE, echo = FALSE}
 # IDs in CSF (131)
-IDs_CSF <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/CSFAcquisition.csv",
+IDs_CSF <- read_delim("data input/export-2026-05-11-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK_271participants/CSFAcquisition.csv",
                           delim = ";", escape_double = FALSE, trim_ws = TRUE) %>%
   filter(CsfSexists == 1) %>%
   group_by(PatientID) %>%
@@ -885,80 +871,99 @@ overview_status_CSF = IDs_CSF_data %>%
 overview_status_CSF
 
 # Date info
-date_CTR <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "CTR",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "CTR")
-date_ALS <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "ALS",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "ALS")
-date_mimic <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "mimic",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "mimic")
-date_PGMC <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "PGMC",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "PGMC")
-date_SYMP <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "SYMP",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "SYMP")
-date_NA = data.frame(Pseudonyme = "6H1HR8R7",age = 58,patient_group = "N.A.")
+date_CTR <- IDs_CSF_data %>%
+  dplyr::left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "CTR")
+date_ALS <- IDs_CSF_data %>%
+  dplyr::left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "ALS")
+date_mimic <- IDs_CSF_data %>%
+  dplyr::left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "mimic")
+date_PGMC <- IDs_CSF_data %>%
+  dplyr::left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "PGMC")
+date_SYMP <- IDs_CSF_data %>%
+  dplyr::left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "SYMP")
+date_NA <- IDs_CSF_data %>%
+  dplyr::left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "NA")
 
-skim(date_CTR)
-skim(date_ALS)
-skim(date_mimic)
-skim(date_PGMC)
-skimr::skim(date_NA)
-skimr::skim(date_SYMP)
+skim(date_CTR %>% filter(Visit == "V0"))
+skim(date_CTR %>% filter(Visit == "V1"))
+skim(date_ALS  %>% filter(Visit == "V0"))
+skim(date_ALS  %>% filter(Visit == "V1"))
+skim(date_mimic %>% filter(Visit == "V0"))
+skim(date_mimic %>% filter(Visit == "V1"))
+skim(date_PGMC %>% filter(Visit == "V0"))
+skim(date_PGMC %>% filter(Visit == "V1"))
+skimr::skim(date_NA %>% filter(Visit == "V0"))
+skimr::skim(date_NA %>% filter(Visit == "V1"))
+skimr::skim(date_SYMP  %>% filter(Visit == "V0"))
+skimr::skim(date_SYMP  %>% filter(Visit == "V1"))
 
-date_all <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC,date_SYMP,date_NA))
+date_all_CSF <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC,date_SYMP,date_NA))
 
 # -> Kruskal Wallis test between samples
-kruskal_test(data = date_all,age~patient_group)
-dunn_test(data = date_all,age~patient_group)
+kruskal_test(data = date_all_CSF %>% filter(Visit == "V0"),age~type)
+dunn_test(data = date_all_CSF %>% filter(Visit == "V0"),age~type)
+kruskal_test(data = date_all_CSF %>% filter(Visit == "V1"),age~type)
+dunn_test(data = date_all_CSF %>% filter(Visit == "V1"),age~type)
 
 ## Sex analysis
-Sex_CTR <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "CTR",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "CTR")
-Sex_ALS <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "ALS",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "ALS")
-Sex_mimic <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "mimic",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "mimic")
-Sex_PGMC <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "PGMC",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "PGMC")
-Sex_SYMP <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_data[IDs_CSF_data$type == "SYMP",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "SYMP")
-Sex_NA = data.frame(Pseudonyme = "6H1HR8R7",sex = "F",patient_group = "N.A.")
+Sex_CTR <- IDs_CSF_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "CTR")
+Sex_ALS <-  IDs_CSF_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "ALS")
+Sex_mimic <-  IDs_CSF_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "mimic")
+Sex_PGMC <-  IDs_CSF_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "PGMC")
+Sex_SYMP <-  IDs_CSF_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "SYMP")
+Sex_NA =   IDs_CSF_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "NA")
 
-Sex_all <- do.call("rbind",list(Sex_ALS,
+Sex_all_CSF <- do.call("rbind",list(Sex_ALS,
                                 Sex_CTR,
                                 Sex_mimic,
                                 Sex_PGMC,
                                 Sex_SYMP,
                                 Sex_NA))
-Sex_all <- Sex_all %>% filter(!is.na(sex))
-table(Sex_all$patient_group,Sex_all$sex)
-fisher.test(Sex_all$patient_group,Sex_all$sex)
-pairwise_fisher_test(table(Sex_all$patient_group,Sex_all$sex), p.adjust.method = "holm")
+Sex_all_CSF <- Sex_all_CSF %>% filter(!is.na(sex))
+Sex_all_CSF_V0 = Sex_all_CSF %>% filter(Visit == "V0")
+Sex_all_CSF_V1 = Sex_all_CSF %>% filter(Visit == "V1")
+table(Sex_all_CSF_V0$type,Sex_all_CSF_V0$sex)
+fisher.test(Sex_all_CSF_V0$type,Sex_all_CSF_V0$sex)
+pairwise_fisher_test(table(Sex_all_CSF_V0$type,Sex_all_CSF_V0$sex), p.adjust.method = "holm")
+table(Sex_all_CSF_V1$type,Sex_all_CSF_V1$sex)
+fisher.test(Sex_all_CSF_V1$type,Sex_all_CSF_V1$sex)
+pairwise_fisher_test(table(Sex_all_CSF_V1$type,Sex_all_CSF_V1$sex), p.adjust.method = "holm")
 ```
 
 #### - Plasma (the patient IDs given by Laura) - not displaying, but it is in code
 ```{r overview-IDs-Plasma-Laura, message=F,warning=FALSE, echo=FALSE}
 # IDs in plasma (235)
-IDs_plasma <- read_delim("data input/export-2025-11-07-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK/BloodAcquisition.csv",
+IDs_plasma <- read_delim("data input/export-2026-05-11-PREMODIALS-AKDTR_BRNO_CHUFR_HMCIL_HRO_KSSGCH_MRI_NIUSASSK_271participants/BloodAcquisition.csv",
                           delim = ";", escape_double = FALSE, trim_ws = TRUE) %>%
   filter(BAexists == 1) %>% 
   group_by(PatientID) %>%
@@ -1046,74 +1051,93 @@ overview_status_plasma = IDs_plasma_data %>%
 overview_status_plasma
 
 # Date info
-date_CTR <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "CTR",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "CTR")
-date_ALS <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "ALS")
-date_mimic <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "mimic",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "mimic")
-date_PGMC <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "PGMC",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "PGMC")
-date_SYMP <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "SYMP",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "SYMP")
-date_NA = data.frame(Pseudonyme = "6H1HR8R7",age = 58,patient_group = "N.A.")
+date_CTR <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "CTR")
+date_ALS <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "ALS")
+date_mimic <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "mimic")
+date_PGMC <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "PGMC")
+date_SYMP <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "SYMP")
+date_NA = IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "NA")
 
-skim(date_CTR)
-skim(date_ALS)
-skim(date_mimic)
-skim(date_PGMC)
-skimr::skim(date_NA)
-skimr::skim(date_SYMP)
+skim(date_CTR %>% filter(Visit == "V0"))
+skim(date_CTR %>% filter(Visit == "V1"))
+skim(date_ALS  %>% filter(Visit == "V0"))
+skim(date_ALS  %>% filter(Visit == "V1"))
+skim(date_mimic %>% filter(Visit == "V0"))
+skim(date_mimic %>% filter(Visit == "V1"))
+skim(date_PGMC %>% filter(Visit == "V0"))
+skim(date_PGMC %>% filter(Visit == "V1"))
+skimr::skim(date_NA %>% filter(Visit == "V0"))
+skimr::skim(date_NA %>% filter(Visit == "V1"))
+skimr::skim(date_SYMP  %>% filter(Visit == "V0"))
+skimr::skim(date_SYMP  %>% filter(Visit == "V1"))
 
-date_all <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC,date_SYMP,date_NA))
+date_all_plasma <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC,date_SYMP,date_NA))
 
 # -> Kruskal Wallis test between samples
-kruskal_test(data = date_all,age~patient_group)
-dunn_test(data = date_all,age~patient_group)
+kruskal_test(data = date_all_plasma %>% filter(Visit == "V0"),age~type)
+dunn_test(data = date_all_plasma %>% filter(Visit == "V0"),age~type)
+kruskal_test(data = date_all_plasma %>% filter(Visit == "V1"),age~type)
+dunn_test(data = date_all_plasma %>% filter(Visit == "V1"),age~type)
 
 ## Sex analysis
-Sex_CTR <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "CTR",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "CTR")
-Sex_ALS <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "ALS")
-Sex_mimic <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "mimic",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "mimic")
-Sex_PGMC <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "PGMC",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "PGMC")
-Sex_SYMP <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_plasma_data[IDs_plasma_data$type == "SYMP",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "SYMP")
-Sex_NA = data.frame(Pseudonyme = "6H1HR8R7",sex = "F",patient_group = "N.A.")
+Sex_CTR <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "CTR")
+Sex_ALS <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "ALS")
+Sex_mimic <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "mimic")
+Sex_PGMC <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "PGMC")
+Sex_SYMP <- IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "SYMP")
+Sex_NA = IDs_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "NA")
 
-Sex_all <- do.call("rbind",list(Sex_ALS,
+Sex_all_plasma <- do.call("rbind",list(Sex_ALS,
                                 Sex_CTR,
                                 Sex_mimic,
                                 Sex_PGMC,
                                 Sex_SYMP,
                                 Sex_NA))
-Sex_all <- Sex_all %>% filter(!is.na(sex))
-table(Sex_all$patient_group,Sex_all$sex)
-fisher.test(Sex_all$patient_group,Sex_all$sex)
-pairwise_fisher_test(table(Sex_all$patient_group,Sex_all$sex), p.adjust.method = "holm")
+Sex_all_plasma <- Sex_all_plasma %>% filter(!is.na(sex))
+Sex_all_plasma_V0 = Sex_all_plasma %>% filter(Visit == "V0")
+Sex_all_plasma_V1 = Sex_all_plasma %>% filter(Visit == "V1")
+table(Sex_all_plasma_V0$type,Sex_all_plasma_V0$sex)
+fisher.test(Sex_all_plasma_V0$type,Sex_all_plasma_V0$sex)
+pairwise_fisher_test(table(Sex_all_plasma_V0$type,Sex_all_plasma_V0$sex), p.adjust.method = "holm")
+table(Sex_all_plasma_V1$type,Sex_all_plasma_V1$sex)
+fisher.test(Sex_all_plasma_V1$type,Sex_all_plasma_V1$sex)
+pairwise_fisher_test(table(Sex_all_plasma_V1$type,Sex_all_plasma_V1$sex), p.adjust.method = "holm")
 
 ```
 
@@ -1150,75 +1174,95 @@ ALS_mutations_ID %>%
   arrange(type)
 
 # Date info
-date_CTR <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "CTR",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "CTR")
-date_ALS <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "ALS")
-date_mimic <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "mimic",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "mimic")
-date_PGMC <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "PGMC",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "PGMC")
-date_SYMP <- Sex_age_all_participants %>%
-  select(Pseudonyme,age) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "SYMP",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "SYMP")
-date_NA = data.frame(Pseudonyme = "6H1HR8R7",age = 58,patient_group = "N.A.")
+date_CTR <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "CTR")
+date_ALS <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "ALS")
+date_mimic <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "mimic")
+date_PGMC <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "PGMC")
+date_SYMP <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "SYMP")
+date_NA = IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,age,Visit,type) %>%
+  filter(type == "NA")
 
-skim(date_CTR)
-skim(date_ALS)
-skim(date_mimic)
-skim(date_PGMC)
-skimr::skim(date_NA)
-skimr::skim(date_SYMP)
 
-#date_all <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC,date_SYMP,date_NA))
-date_all <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC))
+skim(date_CTR %>% filter(Visit == "V0"))
+skim(date_CTR %>% filter(Visit == "V1"))
+skim(date_ALS  %>% filter(Visit == "V0"))
+skim(date_ALS  %>% filter(Visit == "V1"))
+skim(date_mimic %>% filter(Visit == "V0"))
+skim(date_mimic %>% filter(Visit == "V1"))
+skim(date_PGMC %>% filter(Visit == "V0"))
+skim(date_PGMC %>% filter(Visit == "V1"))
+skimr::skim(date_NA %>% filter(Visit == "V0"))
+skimr::skim(date_NA %>% filter(Visit == "V1"))
+skimr::skim(date_SYMP  %>% filter(Visit == "V0"))
+skimr::skim(date_SYMP  %>% filter(Visit == "V1"))
+
+date_all_plasma_CSF <- do.call("rbind",list(date_CTR,date_ALS,date_mimic,date_PGMC))
 
 # -> Kruskal Wallis test between samples
-kruskal_test(data = date_all,age~patient_group)
-dunn_test(data = date_all,age~patient_group)
+kruskal_test(data = date_all_plasma_CSF %>% filter(Visit == "V0"),age~type)
+dunn_test(data = date_all_plasma_CSF %>% filter(Visit == "V0"),age~type)
+kruskal_test(data = date_all_plasma_CSF %>% filter(Visit == "V1"),age~type)
+dunn_test(data = date_all_plasma_CSF %>% filter(Visit == "V1"),age~type)
 
 ## Sex analysis
-Sex_CTR <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "CTR",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "CTR")
-Sex_ALS <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "ALS",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "ALS")
-Sex_mimic <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "mimic",]$PatientID %>%unique()))) %>%
-  mutate(patient_group = "mimic")
-Sex_PGMC <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "PGMC",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "PGMC")
-Sex_SYMP <- Sex_age_all_participants %>%
-  select(Pseudonyme,sex) %>%
-  filter(Pseudonyme %in% na.omit((IDs_CSF_plasma_data[IDs_CSF_plasma_data$type == "SYMP",]$PatientID %>%unique())))  %>%
-  mutate(patient_group = "SYMP")
-Sex_NA = data.frame(Pseudonyme = "6H1HR8R7",sex = "F",patient_group = "N.A.")
+Sex_CTR <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "CTR")
+Sex_ALS <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "ALS")
+Sex_mimic <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "mimic")
+Sex_PGMC <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "PGMC")
+Sex_SYMP <- IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "SYMP")
+Sex_NA = IDs_CSF_plasma_data %>%
+  left_join(Sex_age_all_participants %>% dplyr::rename(Patient = ParticipantCode)) %>%
+  select(PatientID,sex,Visit,type) %>%
+  filter(type == "NA")
 
-Sex_all <- do.call("rbind",list(Sex_ALS,
+Sex_all_plasma_CSF <- do.call("rbind",list(Sex_ALS,
                                 Sex_CTR,
                                 Sex_mimic,
-                                Sex_PGMC))
-                                # Sex_SYMP,
-                                # Sex_NA))
-Sex_all <- Sex_all %>% filter(!is.na(sex))
-table(Sex_all$patient_group,Sex_all$sex)
-fisher.test(Sex_all$patient_group,Sex_all$sex)
-pairwise_fisher_test(table(Sex_all$patient_group,Sex_all$sex), p.adjust.method = "holm")
+                                Sex_PGMC,
+                                Sex_SYMP,
+                                Sex_NA))
+Sex_all_plasma_CSF <- Sex_all_plasma_CSF %>% filter(!is.na(sex))
+Sex_all_plasma_CSF_V0 = Sex_all_plasma_CSF %>% filter(Visit == "V0")
+Sex_all_plasma_CSF_V1 = Sex_all_plasma_CSF %>% filter(Visit == "V1")
+table(Sex_all_plasma_CSF_V0$type,Sex_all_plasma_CSF_V0$sex)
+fisher.test(Sex_all_plasma_CSF_V0$type,Sex_all_plasma_CSF_V0$sex)
+pairwise_fisher_test(table(Sex_all_plasma_CSF_V0$type,Sex_all_plasma_CSF_V0$sex), p.adjust.method = "holm")
+table(Sex_all_plasma_CSF_V1$type,Sex_all_plasma_CSF_V1$sex)
+fisher.test(Sex_all_plasma_CSF_V1$type,Sex_all_plasma_CSF_V1$sex)
+pairwise_fisher_test(table(Sex_all_plasma_CSF_V1$type,Sex_all_plasma_CSF_V1$sex), p.adjust.method = "holm")
+
 ```
 
 ## Bioinformatic analyses
@@ -2090,7 +2134,7 @@ run_DEx <- function(
   model_cols <- unique(c(condition_col, covariates))
   keep <- stats::complete.cases(coldat[, model_cols, drop = FALSE])
   if (!all(keep)) {
-    message(sprintf("Dropping %d samples with missing values in: %s",
+    message(sprintf("Dropping % d samples with missing values in: %s",
                     sum(!keep), paste(model_cols, collapse=", ")))
   }
   coldat <- coldat[keep, , drop = FALSE]
@@ -2114,6 +2158,7 @@ run_DEx <- function(
 
   # model
   fit <- limma::lmFit(expr, design)
+  data_without_covariates = limma::removeBatchEffect(expr,)
 
   cond_levels <- levels(coldat[[condition_col]])
 
@@ -2329,11 +2374,12 @@ volcano_plot_contrast <- function(
 # - CSF
 coldata_CSF = as.data.frame(colData(lipidomics_data_CSF$se_filt_impute))
 coldata_CSF_new = coldata_CSF %>% 
-  mutate(PatientID = tube_batch_CSF$PatientID,
-         Visit = tube_batch_CSF$Visit) %>%
+  left_join(tube_batch_CSF %>%
+              select(PatientID,Visit,Tube_number) %>%
+              dplyr::rename(label = Tube_number)) %>%
   mutate(PatientID = ifelse(is.na(PatientID),"6H1HR8R7",PatientID)) %>%
-  left_join(date_all %>% dplyr::select(Pseudonyme,age) %>% dplyr::rename(PatientID = Pseudonyme)) %>%
-  left_join(Sex_all %>% dplyr::select(Pseudonyme,sex) %>% dplyr::rename(PatientID = Pseudonyme)) 
+  left_join(date_all_CSF %>% dplyr::select(PatientID,age,Visit)) %>%
+  left_join(Sex_all_CSF %>% dplyr::select(PatientID,sex,Visit)) 
 colData(lipidomics_data_CSF$se_filt_impute) = S4Vectors::DataFrame(coldata_CSF_new)
 
 # run for each visit
@@ -2350,11 +2396,12 @@ writexl::write_xlsx(list(DE_CSF_V0 = res_CSF_V0_all, DE_CSF_V1 = res_CSF_V1_all)
 # - Plasma
 coldata_plasma = as.data.frame(colData(lipidomics_data_plasma$se_filt_impute))
 coldata_plasma_new = coldata_plasma %>% 
-  mutate(PatientID = tube_batch_plasma$PatientID,
-         Visit = tube_batch_plasma$Visit) %>%
+  left_join(tube_batch_plasma %>%
+              select(PatientID,Visit,Tube_number) %>%
+              dplyr::rename(label = Tube_number)) %>%
   mutate(PatientID = ifelse(is.na(PatientID),"6H1HR8R7",PatientID)) %>%
-  left_join(date_all %>% dplyr::select(Pseudonyme,age) %>% dplyr::rename(PatientID = Pseudonyme)) %>%
-  left_join(Sex_all %>% dplyr::select(Pseudonyme,sex) %>% dplyr::rename(PatientID = Pseudonyme)) 
+  left_join(date_all_plasma %>% dplyr::select(PatientID,age,Visit)) %>%
+  left_join(Sex_all_plasma %>% dplyr::select(PatientID,sex,Visit)) 
 colData(lipidomics_data_plasma$se_filt_impute) = S4Vectors::DataFrame(coldata_plasma_new)
 
 # run for each visit
@@ -2368,6 +2415,346 @@ res_plasma_V1_all <- summarise_DE(res_plasma_V1, key = "name")
 writexl::write_xlsx(list(DE_plasma_V0 = res_plasma_V0_all, DE_plasma_V1 = res_plasma_V1_all),
                     "results/DE_plasma_by_visit.xlsx")
 
+# get significant lipids
+significant_lipids_V1_ALS_CTR = res_plasma_V1$tables$`conditionALS-conditionCTR` %>% filter(adj.P.Val < 0.1) %>% rownames()
+significant_lipids_V0_PGMC_CTR = res_plasma_V0$tables$`conditionPGMC-conditionCTR` %>% filter(adj.P.Val < 0.1) %>% rownames()
+significant_lipids_V1_PGMC_CTR = res_plasma_V1$tables$`conditionPGMC-conditionCTR` %>% filter(adj.P.Val < 0.1) %>% rownames()
+
+# check boxpots of lipids of interest
+keep <- complete.cases(coldata_plasma_new[, c("batch", "sex", "age")])
+
+plasma_data_nobatch <- removeBatchEffect(
+  assay(lipidomics_data_plasma$se_filt_impute)[, keep],
+  batch = coldata_plasma_new$batch[keep],
+  batch2 = coldata_plasma_new$sex[keep],
+  covariates = coldata_plasma_new$age[keep]
+)
+colnames(plasma_data_nobatch) = coldata_plasma_new[keep,]$ID
+
+
+significant_lipids_ALS_CTR = significant_lipids_V1_ALS_CTR
+significant_lipids_PGMC_CTR = c(significant_lipids_V0_PGMC_CTR,
+                       significant_lipids_V1_PGMC_CTR)
+
+# significant lipids/lipid family in ALS vs CTR
+print(significant_lipids_ALS_CTR)
+prefix_counts <- table(sub("^([A-Za-z]+).*", "\\1", significant_lipids_ALS_CTR))
+print(sort(prefix_counts, decreasing = TRUE))
+
+# significant lipids/lipid family in PGMC vs CTR
+print(significant_lipids_PGMC_CTR)
+prefix_counts <- table(sub("^([A-Za-z]+).*", "\\1", significant_lipids_PGMC_CTR))
+print(sort(prefix_counts, decreasing = TRUE))
+
+intersect(significant_lipids_ALS_CTR,
+          significant_lipids_PGMC_CTR)
+
+mat     <- plasma_data_nobatch        
+coldata <- coldata_plasma_new[keep,] %>% left_join(PGMC_mutations_ID) 
+ 
+id_col        <- "ID"
+visit_col     <- "Visit"        
+condition_col <- "condition"    
+ 
+visit_levels     <- c("V0", "V1")
+condition_levels <- c("ALS", "CTR", "mimic", "PGMC")
+ 
+out_pdf   <- "plots/lipid_boxplots_ALS_CTR.pdf"
+
+if (!is.null(id_col)) {
+  rownames(coldata) <- coldata[[id_col]]
+}
+coldata <- coldata[colnames(mat), , drop = FALSE]
+ 
+lipids_to_plot <- significant_lipids_ALS_CTR
+ 
+pdf(out_pdf, width = 8, height = 5)
+ 
+ 
+for (lip in lipids_to_plot) {
+ 
+  df <- data.frame(
+    value     = as.numeric(mat[lip, ]),
+    Visit     = factor(coldata[[visit_col]], levels = visit_levels),
+    Condition = factor(coldata[[condition_col]], levels = condition_levels),
+    type      = factor(ifelse(is.na(coldata[["type"]]), "Non-PGMC",
+                               as.character(coldata[["type"]])))) %>%
+    filter(Condition %in% condition_levels)
+  
+   shape_values <- c(
+    "Non-PGMC"    = 1,   # open circle, low-key
+    "C9orf72"    = 16,  # filled circle
+    "SOD1"    = 17,  # filled triangle
+    "TARDBP"    = 15,  # filled square
+    "FUS"    = 18,  # filled diamond
+    "other"    = 8    # asterisk
+  )
+ 
+ 
+  p <- ggplot(df, aes(x = Condition, y = value, fill = Condition)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(aes(shape = type),width = 0.15, size = 1, alpha = 0.6) +
+    facet_wrap(~ Visit, nrow = 1) +
+    scale_fill_manual(values  = c('CTR' = '#6F8EB2',  
+                                    'ALS' = '#B2936F',
+                                    'PGMC' = '#ad5291',
+                                    'mimic' = '#62cda9')) + 
+    scale_shape_manual(values = shape_values) +
+    labs(title = lip, x = NULL, y = "Value") +
+    guides(fill = "none") +
+    theme_bw(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+ 
+  print(p)
+}
+ 
+dev.off()
+
+out_pdf   <- "plots/lipid_boxplots_PGMC_CTR.pdf"
+
+if (!is.null(id_col)) {
+  rownames(coldata) <- coldata[[id_col]]
+}
+coldata <- coldata[colnames(mat), , drop = FALSE]
+ 
+lipids_to_plot <- significant_lipids_PGMC_CTR
+ 
+pdf(out_pdf, width = 8, height = 5)
+ 
+for (lip in lipids_to_plot) {
+ 
+ df <- data.frame(
+    value     = as.numeric(mat[lip, ]),
+    Visit     = factor(coldata[[visit_col]], levels = visit_levels),
+    Condition = factor(coldata[[condition_col]], levels = condition_levels),
+    type      = factor(ifelse(is.na(coldata[["type"]]), "Non-PGMC",
+                               as.character(coldata[["type"]])))) %>%
+    filter(Condition %in% condition_levels)
+  
+   shape_values <- c(
+    "Non-PGMC"    = 1,   # open circle, low-key
+    "C9orf72"    = 16,  # filled circle
+    "SOD1"    = 17,  # filled triangle
+    "TARDBP"    = 15,  # filled square
+    "FUS"    = 18,  # filled diamond
+    "other"    = 8    # asterisk
+  )
+ 
+ 
+  p <- ggplot(df, aes(x = Condition, y = value, fill = Condition)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(aes(shape = type),width = 0.15, size = 1, alpha = 0.6) +
+    facet_wrap(~ Visit, nrow = 1) +
+    scale_fill_manual(values  = c('CTR' = '#6F8EB2',  
+                                    'ALS' = '#B2936F',
+                                    'PGMC' = '#ad5291',
+                                    'mimic' = '#62cda9')) + 
+    scale_shape_manual(values = shape_values) +
+    labs(title = lip, x = NULL, y = "Value") +
+    guides(fill = "none") +
+    theme_bw(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+ 
+  print(p)
+}
+ 
+dev.off()
+
+
+#### do all the same analyses but only with patients at both V0 and V1
+# CSF at both V0 and V1
+coldata_CSF_new_V0 = coldata_CSF_new %>% filter(Visit == "V0")
+coldata_CSF_new_V1 = coldata_CSF_new %>% filter(Visit == "V1")
+patientIDs_CSF_V0_V1 = intersect(coldata_CSF_new_V0$PatientID,
+                                 coldata_CSF_new_V1$PatientID)
+coldata_CSF_new_V0_V1 = coldata_CSF_new[which(coldata_CSF_new$PatientID %in% patientIDs_CSF_V0_V1),]
+lipidomics_data_CSF_V0_V1 = lipidomics_data_CSF
+lipidomics_data_CSF_V0_V1$se_filt_impute = lipidomics_data_CSF_V0_V1$se_filt_impute[,which(coldata_CSF_new$PatientID %in% patientIDs_CSF_V0_V1)]
+colData(lipidomics_data_CSF_V0_V1$se_filt_impute) = S4Vectors::DataFrame(coldata_CSF_new_V0_V1)
+
+# run for each visit
+res_CSF_V0_IDs_V0_V1 <- run_DEx_visit(lipidomics_data_CSF_V0_V1$se_filt_impute, "V0")
+res_CSF_V1_IDS_V0_V1 <- run_DEx_visit(lipidomics_data_CSF_V0_V1$se_filt_impute, "V1")
+
+# summarise for each visit
+res_CSF_V0_all_IDs_V0_V1 <- summarise_DE(res_CSF_V0_IDs_V0_V1, key = "name")
+res_CSF_V1_all_IDs_V0_V1 <- summarise_DE(res_CSF_V1_IDS_V0_V1, key = "name")
+
+writexl::write_xlsx(list(DE_CSF_V0 = res_CSF_V0_all_IDs_V0_V1, DE_CSF_V1 = res_CSF_V1_all_IDs_V0_V1),
+                    "results/DE_CSF_by_visit_IDs_at_V0_V1.xlsx")
+
+# - Plasma
+coldata_plasma_new_V0 = coldata_plasma_new %>% filter(Visit == "V0")
+coldata_plasma_new_V1 = coldata_plasma_new %>% filter(Visit == "V1")
+patientIDs_plasma_V0_V1 = intersect(coldata_plasma_new_V0$PatientID,
+                                 coldata_plasma_new_V1$PatientID)
+coldata_plasma_new_V0_V1 = coldata_plasma_new[which(coldata_plasma_new$PatientID %in% patientIDs_plasma_V0_V1),]
+lipidomics_data_plasma_V0_V1 = lipidomics_data_plasma
+lipidomics_data_plasma_V0_V1$se_filt_impute = lipidomics_data_plasma_V0_V1$se_filt_impute[,which(coldata_plasma_new$PatientID %in% patientIDs_plasma_V0_V1)]
+colData(lipidomics_data_plasma_V0_V1$se_filt_impute) = S4Vectors::DataFrame(coldata_plasma_new_V0_V1)
+
+# run for each visit
+res_plasma_V0_IDs_V0_V1 <- run_DEx_visit(lipidomics_data_plasma_V0_V1$se_filt_impute, "V0")
+res_plasma_V1_IDs_V0_V1 <- run_DEx_visit(lipidomics_data_plasma_V0_V1$se_filt_impute, "V1")
+
+# summarise for each visit
+res_plasma_V0_all_IDs_V0_V1 <- summarise_DE(res_plasma_V0_IDs_V0_V1, key = "name")
+res_plasma_V1_all_IDs_V0_V1 <- summarise_DE(res_plasma_V1_IDs_V0_V1, key = "name")
+
+writexl::write_xlsx(list(DE_plasma_V0 = res_plasma_V0_all_IDs_V0_V1, DE_plasma_V1 = res_plasma_V1_all_IDs_V0_V1),
+                    "results/DE_plasma_by_visit_IDs_at_V0_V1.xlsx")
+
+# get significant lipids
+significant_lipids_V1_ALS_CTR_V0_V1 = res_plasma_V1_IDs_V0_V1$tables$`conditionALS-conditionCTR` %>% filter(adj.P.Val < 0.1) %>% rownames()
+significant_lipids_V0_PGMC_CTR_V0_V1 = res_plasma_V0_IDs_V0_V1$tables$`conditionPGMC-conditionCTR` %>% filter(adj.P.Val < 0.1) %>% rownames()
+significant_lipids_V1_PGMC_CTR_V0_V1 = res_plasma_V1_IDs_V0_V1$tables$`conditionPGMC-conditionCTR` %>% filter(adj.P.Val < 0.1) %>% rownames()
+
+# check boxpots of lipids of interest
+keep <- complete.cases(coldata_plasma_new_V0_V1[, c("batch", "sex", "age")])
+
+plasma_data_nobatch_V0_V1 <- removeBatchEffect(
+  assay(lipidomics_data_plasma_V0_V1$se_filt_impute)[, keep],
+  batch = coldata_plasma_new_V0_V1$batch[keep],
+  batch2 = coldata_plasma_new_V0_V1$sex[keep],
+  covariates = coldata_plasma_new_V0_V1$age[keep]
+)
+colnames(plasma_data_nobatch_V0_V1) = coldata_plasma_new_V0_V1[keep,]$ID
+
+
+significant_lipids_ALS_CTR_V0_V1 = significant_lipids_V1_ALS_CTR_V0_V1
+significant_lipids_PGMC_CTR_V0_V1 = c(significant_lipids_V0_PGMC_CTR_V0_V1,
+                       significant_lipids_V1_PGMC_CTR_V0_V1)
+
+# significant lipids/lipid family in ALS vs CTR
+print(significant_lipids_ALS_CTR_V0_V1)
+prefix_counts <- table(sub("^([A-Za-z]+).*", "\\1", significant_lipids_ALS_CTR_V0_V1))
+print(sort(prefix_counts, decreasing = TRUE))
+
+# significant lipids/lipid family in PGMC vs CTR
+print(significant_lipids_PGMC_CTR_V0_V1)
+prefix_counts <- table(sub("^([A-Za-z]+).*", "\\1", significant_lipids_ALS_CTR_V0_V1))
+print(sort(prefix_counts, decreasing = TRUE))
+
+intersect(significant_lipids_ALS_CTR_V0_V1,
+          significant_lipids_PGMC_CTR_V0_V1)
+
+mat     <- plasma_data_nobatch_V0_V1        
+coldata <- coldata_plasma_new_V0_V1[keep,] %>% left_join(PGMC_mutations_ID) 
+ 
+id_col        <- "ID"
+visit_col     <- "Visit"        
+condition_col <- "condition"    
+ 
+visit_levels     <- c("V0", "V1")
+condition_levels <- c("ALS", "CTR", "mimic", "PGMC")
+ 
+out_pdf   <- "plots/lipid_boxplots_ALS_CTR_V0_V1.pdf"
+
+if (!is.null(id_col)) {
+  rownames(coldata) <- coldata[[id_col]]
+}
+coldata <- coldata[colnames(mat), , drop = FALSE]
+ 
+lipids_to_plot <- significant_lipids_ALS_CTR_V0_V1
+ 
+pdf(out_pdf, width = 8, height = 5)
+ 
+for (lip in lipids_to_plot) {
+ 
+  df <- data.frame(
+    value     = as.numeric(mat[lip, ]),
+    Visit     = factor(coldata[[visit_col]], levels = visit_levels),
+    Condition = factor(coldata[[condition_col]], levels = condition_levels),
+    type      = factor(ifelse(is.na(coldata[["type"]]), "Non-PGMC",
+                               as.character(coldata[["type"]])))) %>%
+    filter(Condition %in% condition_levels)
+  
+   shape_values <- c(
+    "Non-PGMC"    = 1,   # open circle, low-key
+    "C9orf72"    = 16,  # filled circle
+    "SOD1"    = 17,  # filled triangle
+    "TARDBP"    = 15,  # filled square
+    "FUS"    = 18,  # filled diamond
+    "other"    = 8    # asterisk
+  )
+ 
+ 
+  p <- ggplot(df, aes(x = Condition, y = value, fill = Condition)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(aes(shape = type),width = 0.15, size = 1, alpha = 0.6) +
+    facet_wrap(~ Visit, nrow = 1) +
+    scale_fill_manual(values  = c('CTR' = '#6F8EB2',  
+                                    'ALS' = '#B2936F',
+                                    'PGMC' = '#ad5291',
+                                    'mimic' = '#62cda9')) + 
+    scale_shape_manual(values = shape_values) +
+    labs(title = lip, x = NULL, y = "Value") +
+    guides(fill = "none") +
+    theme_bw(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+ 
+  print(p)
+}
+ 
+dev.off()
+
+out_pdf   <- "plots/lipid_boxplots_PGMC_CTR_V0_V1.pdf"
+
+if (!is.null(id_col)) {
+  rownames(coldata) <- coldata[[id_col]]
+}
+coldata <- coldata[colnames(mat), , drop = FALSE]
+ 
+lipids_to_plot <- significant_lipids_PGMC_CTR_V0_V1
+ 
+pdf(out_pdf, width = 8, height = 5)
+ 
+for (lip in lipids_to_plot) {
+ 
+  df <- data.frame(
+    value     = as.numeric(mat[lip, ]),
+    Visit     = factor(coldata[[visit_col]], levels = visit_levels),
+    Condition = factor(coldata[[condition_col]], levels = condition_levels),
+    type      = factor(ifelse(is.na(coldata[["type"]]), "Non-PGMC",
+                               as.character(coldata[["type"]])))) %>%
+    filter(Condition %in% condition_levels)
+  
+   shape_values <- c(
+    "Non-PGMC"    = 1,   # open circle, low-key
+    "C9orf72"    = 16,  # filled circle
+    "SOD1"    = 17,  # filled triangle
+    "TARDBP"    = 15,  # filled square
+    "FUS"    = 18,  # filled diamond
+    "other"    = 8    # asterisk
+  )
+ 
+ 
+  p <- ggplot(df, aes(x = Condition, y = value, fill = Condition)) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(aes(shape = type),width = 0.15, size = 1, alpha = 0.6) +
+    facet_wrap(~ Visit, nrow = 1) +
+    scale_fill_manual(values  = c('CTR' = '#6F8EB2',  
+                                    'ALS' = '#B2936F',
+                                    'PGMC' = '#ad5291',
+                                    'mimic' = '#62cda9')) + 
+    scale_shape_manual(values = shape_values) +
+    labs(title = lip, x = NULL, y = "Value") +
+    guides(fill = "none") +
+    theme_bw(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+ 
+  print(p)
+}
+ 
+dev.off()
 
 ```
 
@@ -2414,7 +2801,7 @@ p = volcano_plot_contrast(res_CSF_V0_all,
                       alpha      = 0.1,      
                       add_x      = 0.9, add_y = 0.05)
 p
-pdf("plots/DE_CSF_V0_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_CSF_V0_PGMC_CTR_FDR10.pdf",width = 12,height = 9)
 p
 dev.off()
 
@@ -2428,7 +2815,7 @@ p = volcano_plot_contrast(res_CSF_V1_all,
                       alpha      = 0.1,      
                       add_x      = 0.7, add_y = 0.05)
 p
-pdf("plots/DE_CSF_V1_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_CSF_V1_PGMC_CTR_FDR10.pdf",width = 12,height = 9)
 p
 dev.off()
 ```
@@ -2446,9 +2833,25 @@ p = volcano_plot_contrast(res_plasma_V0_all,
                       alpha      = 0.1,      
                       add_x      = 0.5, add_y = 0.1)
 p
-pdf("plots/DE_plasma_V0_ALS_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V0_ALS_CTR_FDR10.pdf",width = 12,height = 9)
 p
 dev.off()
+
+# ALS vs CTR (both at V0 and V1)
+p = volcano_plot_contrast(res_plasma_V0_all_IDs_V0_V1,
+                      log2fc_col = "logFC_ALS_CTR",
+                      padj_col   = "adj.P.Val_ALS_CTR",
+                      group_pos  = "ALS",
+                      group_neg  = "CTR",
+                      title      = "ALS vs CTR at V0 - IDs at V0 and V1 (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.5, add_y = 0.1)
+p
+pdf("plots/DE_plasma_V0_ALS_CTR_FDR10_IDs_V0_V1.pdf",width = 12,height = 9)
+p
+dev.off()
+
 
 p = volcano_plot_contrast(res_plasma_V1_all,
                       log2fc_col = "logFC_ALS_CTR",
@@ -2460,7 +2863,7 @@ p = volcano_plot_contrast(res_plasma_V1_all,
                       alpha      = 0.05,      
                       add_x      = 0.7, add_y = 0.1)
 p
-pdf("plots/DE_plasma_V1_ALS_CTR_FDR5.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V1_ALS_CTR_FDR5.pdf",width = 12,height = 9)
 p
 dev.off()
 
@@ -2474,7 +2877,21 @@ p = volcano_plot_contrast(res_plasma_V1_all,
                       alpha      = 0.1,      
                       add_x      = 0.7, add_y = 0.1)
 p
-pdf("plots/DE_plasma_V1_ALS_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V1_ALS_CTR_FDR10.pdf",width = 12,height = 9)
+p
+dev.off()
+
+p = volcano_plot_contrast(res_plasma_V1_all_IDs_V0_V1,
+                      log2fc_col = "logFC_ALS_CTR",
+                      padj_col   = "adj.P.Val_ALS_CTR",
+                      group_pos  = "ALS",
+                      group_neg  = "CTR",
+                      title      = "ALS vs CTR at V1 - IDs at V0 and V1 (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.7, add_y = 0.1)
+p
+pdf("plots/DE_plasma_V1_ALS_CTR_FDR10_IDs_V0_V1.pdf",width = 12,height = 9)
 p
 dev.off()
 
@@ -2490,9 +2907,10 @@ p = volcano_plot_contrast(res_plasma_V0_all,
                       alpha      = 0.05,      
                       add_x      = 0.7, add_y = 0.1)
 p
-pdf("plots/DE_plasma_V0_PGMC_CTR_FDR5.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V0_PGMC_CTR_FDR5.pdf",width = 12,height = 9)
 p
 dev.off()
+
 p = volcano_plot_contrast(res_plasma_V0_all,
                       log2fc_col = "logFC_PGMC_CTR",
                       padj_col   = "adj.P.Val_PGMC_CTR",
@@ -2503,7 +2921,21 @@ p = volcano_plot_contrast(res_plasma_V0_all,
                       alpha      = 0.1,      
                       add_x      = 0.7, add_y = 0.1)
 p
-pdf("plots/DE_plasma_V0_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V0_PGMC_CTR_FDR10.pdf",width = 12,height = 9)
+p
+dev.off()
+
+p = volcano_plot_contrast(res_plasma_V0_all_IDs_V0_V1,
+                      log2fc_col = "logFC_PGMC_CTR",
+                      padj_col   = "adj.P.Val_PGMC_CTR",
+                      group_pos  = "PGMC",
+                      group_neg  = "CTR",
+                      title      = "PGMC vs CTR at V0 - IDs at V0 and V1 (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.7, add_y = 0.1)
+p
+pdf("plots/DE_plasma_V0_PGMC_CTR_FDR10_IDs_V0_V1.pdf",width = 12,height = 9)
 p
 dev.off()
 
@@ -2517,7 +2949,21 @@ p = volcano_plot_contrast(res_plasma_V1_all,
                       alpha      = 0.1,      
                       add_x      = 0.9, add_y = -0.1)
 p
-pdf("plots/DE_plasma_V1_PGMC_CTR_FDR10.pdf",width = 12,height = 8)
+pdf("plots/DE_plasma_V1_PGMC_CTR_FDR10.pdf",width = 12,height = 9)
+p
+dev.off()
+
+p = volcano_plot_contrast(res_plasma_V1_all_IDs_V0_V1,
+                      log2fc_col = "logFC_PGMC_CTR",
+                      padj_col   = "adj.P.Val_PGMC_CTR",
+                      group_pos  = "PGMC",
+                      group_neg  = "CTR",
+                      title      = "PGMC vs CTR at V1 - IDs at V0 and V1 (FDR = 10%)",
+                      label_col = "name",
+                      alpha      = 0.1,      
+                      add_x      = 0.9, add_y = -0.1)
+p
+pdf("plots/DE_plasma_V1_PGMC_CTR_FDR10_IDs_V0_V1.pdf",width = 12,height = 9)
 p
 dev.off()
 
