@@ -1437,6 +1437,7 @@ writexl::write_xlsx(as.data.frame(assay(lipidomics_data_CSF$se_filtered)),"resul
 writexl::write_xlsx(as.data.frame(assay(lipidomics_data_CSF$se_filt_norm)),"results/data_filtered_normalized_CSF.xlsx")
 
 # imputation
+set.seed(42)
 lipidomics_data_CSF$se_filt_impute <- impute(
   lipidomics_data_CSF$se_filt_norm,fun = "MinProb",q = 0.01)
 
@@ -1478,6 +1479,7 @@ writexl::write_xlsx(as.data.frame(assay(lipidomics_data_plasma$se_filtered)),"re
 writexl::write_xlsx(as.data.frame(assay(lipidomics_data_plasma$se_filt_norm)),"results/data_filtered_normalized_plasma.xlsx")
 
 # imputation
+set.seed(42)
 lipidomics_data_plasma$se_filt_impute <- impute(
   lipidomics_data_plasma$se_filt_norm,fun = "MinProb",q = 0.01)
 
@@ -2217,6 +2219,7 @@ run_DEx <- function(
   }
   contrasts_norm <- vapply(contrasts, normalize_terms, character(1))
   Cmat <- limma::makeContrasts(contrasts = contrasts_norm, levels = design)
+  set.seed(42) 
 
   fit2 <- limma::contrasts.fit(fit, Cmat)
   fit2 <- limma::eBayes(fit2, robust = robust, trend = trend)
@@ -2434,7 +2437,7 @@ colnames(plasma_data_nobatch) = coldata_plasma_new[keep,]$ID
 
 significant_lipids_ALS_CTR = significant_lipids_V1_ALS_CTR
 significant_lipids_PGMC_CTR = c(significant_lipids_V0_PGMC_CTR,
-                       significant_lipids_V1_PGMC_CTR)
+                       significant_lipids_V1_PGMC_CTR) %>% unique()
 
 # significant lipids/lipid family in ALS vs CTR
 print(significant_lipids_ALS_CTR)
@@ -2448,6 +2451,13 @@ print(sort(prefix_counts, decreasing = TRUE))
 
 intersect(significant_lipids_ALS_CTR,
           significant_lipids_PGMC_CTR)
+
+# merged
+significant_both = c(significant_lipids_ALS_CTR,
+                     significant_lipids_PGMC_CTR) %>% unique()
+print(significant_both)
+prefix_counts <- table(sub("^([A-Za-z]+).*", "\\1", significant_both))
+print(sort(prefix_counts, decreasing = TRUE))
 
 mat     <- plasma_data_nobatch        
 coldata <- coldata_plasma_new[keep,] %>% left_join(PGMC_mutations_ID) 
